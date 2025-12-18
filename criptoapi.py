@@ -15,7 +15,10 @@ class BinanceDataAPI:
     
     simbols = {
         "BTC/USD": "BTCUSDT",
-        "ETH/USD": "ETHUSDT"
+        "ETH/USD": "ETHUSDT",
+        "BNB/USD": "BNBUSDT",
+        "XRP/USD": "XRPUSDT",
+        "SOL/USD": "SOLUSDT"
     }
     
     columnes = [
@@ -144,15 +147,15 @@ class CryptoDataAPI:
 def resum(data: Dict[str, pd.DataFrame]):
     for pair, df in data.items():
         print(f"\n{pair}:")
-        print(f"   Nombre de dades: {len(df):,}")
-        print(f"   Dates: {df['open_time'].min()} ; {df['open_time'].max()}")
-        print(f"   Rang de preus: ${df['low'].min():,.2f} ; ${df['high'].max():,.2f}")
-        print(f"   Ultim tancament: ${df['close'].iloc[-1]:,.2f}")
-        print(f"   Volum total: {df['volume'].sum():,.2f}")
+        print(f" Nombre de dades: {len(df):,}")
+        print(f" Dates: {df['open_time'].min()} ; {df['open_time'].max()}")
+        print(f" Rang de preus: ${df['low'].min():,.2f} ; ${df['high'].max():,.2f}")
+        print(f" Ultim tancament: ${df['close'].iloc[-1]:,.2f}")
+        print(f" Volum total: {df['volume'].sum():,.2f}")
         
         returns = df['close'].pct_change().dropna()
-        print(f"   Retorn mitjà: {returns.mean() * 24 * 60 * 100:.2f}%")
-        print(f"   Volatilitat anualitzada: {returns.std() * np.sqrt(365 * 24 * 60) * 100:.1f}%")
+        print(f" Retorn mitjà: {returns.mean() * 24 * 60 * 100:.2f}%")
+        print(f" Volatilitat anualitzada: {returns.std() * np.sqrt(365 * 24 * 60) * 100:.1f}%")
 
 
 def tempsaprox(days: int, num_pairs: int = 2) -> float:
@@ -162,30 +165,24 @@ def tempsaprox(days: int, num_pairs: int = 2) -> float:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="API per obtenir dades de 1 minut pels parells BTC/USD and ETH/USD",
+        description="API per obtenir dades de 1 minut pels parells de criptomonedes",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Exemples:
-    python criptoapi.py                      # Per defecte 7 dies
-    python criptoapi.py --days 30            # 30 dies
-    python criptoapi.py --days 365           # Tot 1 any
+        Exemples:
+        python criptoapi.py                      # Per defecte 7 dies
+        python criptoapi.py --days 30            # 30 dies
+        python criptoapi.py --days 365           # Tot 1 any
         """
     )
     parser.add_argument("--days", type=int, default=7, 
                         help="Nombre de dies per obtenir (per defecte: 7)")
     parser.add_argument("--output", type=str, default=".", 
                         help="Directori pel CSV")
-    
     args = parser.parse_args()
-    
     source = "binance"
-    
     api = CryptoDataAPI()
-    
     temps = tempsaprox(args.days, 2)
-    
     print(f"\n Temps aproximat: ~{temps:.1f} minut")
-    
     data = api.obtenirtot(days=args.days, output_dir=args.output)
     
     resum(data)
