@@ -30,14 +30,14 @@ class BinanceDataAPI:
             "User-Agent": "CryptoDataAPI/1.0"
         })
     
-    def msdatetime(self, ms: int) -> datetime:
+    def msdatetime(self, ms: int):
         return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
     
-    def datetimems(self, dt: datetime) -> int:
+    def datetimems(self, dt: datetime):
         return int(dt.timestamp() * 1000)
     
     def obtenircolumnes(self, symbol: str, inici: datetime, final: datetime, 
-                     interval: str = "1m", limit: int = 1000) -> list:
+                     interval: str = "1m", limit: int = 1000):
 
         params = {
             "symbol": symbol,
@@ -52,10 +52,7 @@ class BinanceDataAPI:
         return response.json()
     
     def dadeshistoriques(self, pair: str, dies: int = 365, 
-                               guardarcsv: bool = True, output_dir: str = ".") -> pd.DataFrame:
-        
-        if pair not in self.simbols:
-            raise ValueError(f"Unsupported pair: {pair}. Use: {list(self.simbols.keys())}")
+                               guardarcsv: bool = True, output_dir: str = "."):
         
         symbol = self.simbols[pair]
         final = datetime.now(timezone.utc)
@@ -100,7 +97,7 @@ class BinanceDataAPI:
                 time.sleep(2 ** comptereint)  # Pausa exponencial per si s'ha saturat l'API
                 continue
         
-        print(f"\r Progres: 100% ({len(dadescomp):,} veles) ✓")
+        print(f"\r Progres: 100% ({len(dadescomp):,} veles)")
         
         df = pd.DataFrame(dadescomp, columns=self.columnes)
         
@@ -128,18 +125,7 @@ class BinanceDataAPI:
         
         return df
     
-    def obtpreuactual(self, pair: str) -> dict:
-        if pair not in self.simbols:
-            raise ValueError(f"Unsupported pair: {pair}")
-        
-        symbol = self.simbols[pair]
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        response = self.session.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return {"symbol": pair, "price": float(data["price"])}
-    
-    def obtparells(self, dies: int = 365, output_dir: str = ".") -> dict:
+    def obtparells(self, dies: int = 365, output_dir: str = "."):
         data = {}
         for pair in self.simbols.keys():
             data[pair] = self.dadeshistoriques(pair, dies, output_dir=output_dir)
@@ -151,24 +137,10 @@ class CryptoDataAPI:
     def __init__(self):
         self.binance = BinanceDataAPI()
         
-    def busca(self, pair: str, days: int = 365, source: str = "binance",
-              guardarcsv: bool = True, output_dir: str = ".") -> pd.DataFrame:
-        
-        if source == "binance":
-            return self.binance.dadeshistoriques(pair, days, guardarcsv, output_dir)
-        else:
-            raise ValueError(f"Unknown source: {source}. Use 'binance' or 'sample'")
-    
     def obtenirtot(self, days: int = 365, source: str = "binance",
-                  output_dir: str = ".") -> Dict[str, pd.DataFrame]:
-        if source == "binance":
-            return self.binance.obtparells(days, output_dir)
-        else:
-            raise ValueError(f"Unknown source: {source}")
-    
-    def supported_pairs(self) -> list:
-        return list(self.binance.simbols.keys())
-
+                  output_dir: str = "."):
+        return self.binance.obtparells(days, output_dir)
+        
 def resum(data: Dict[str, pd.DataFrame]):
     for pair, df in data.items():
         print(f"\n{pair}:")
