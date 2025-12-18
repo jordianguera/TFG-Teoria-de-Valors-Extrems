@@ -158,7 +158,7 @@ def resum(data: Dict[str, pd.DataFrame]):
         print(f" Volatilitat anualitzada: {returns.std() * np.sqrt(365 * 24 * 60) * 100:.1f}%")
 
 
-def tempsaprox(days: int, num_pairs: int = 2) -> float:
+def tempsaprox(days: int, num_pairs: int = 5):
     velesperpair = days * 24 * 60
     reqperpair = velesperpair // 1000 + 1
     return reqperpair * 0.15 * num_pairs / 60
@@ -181,7 +181,7 @@ def main():
     args = parser.parse_args()
     source = "binance"
     api = CryptoDataAPI()
-    temps = tempsaprox(args.days, 2)
+    temps = tempsaprox(args.days, 5)
     print(f"\n Temps aproximat: ~{temps:.1f} minut")
     data = api.obtenirtot(days=args.days, output_dir=args.output)
     
