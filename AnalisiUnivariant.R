@@ -17,11 +17,234 @@ logretornsBNB <- carrega("BNBUSDT_1m_365d.csv")
 logretornsXRP <- carrega("XRPUSDT_1m_365d.csv")
 logretornsSOL <- carrega("SOLUSDT_1m_365d.csv")
 
-lossBTC <- -logretornsBTC
-lossETH <- -logretornsETH
-lossBNB <- -logretornsBNB
-lossXRP <- -logretornsXRP
-lossSOL <- -logretornsSOL
+lossBTC <- -logretornsBTC[logretornsBTC<0]
+lossETH <- -logretornsETH[logretornsETH<0]
+lossBNB <- -logretornsBNB[logretornsBNB<0]
+lossXRP <- -logretornsXRP[logretornsXRP<0]
+lossSOL <- -logretornsSOL[logretornsSOL<0]
+
+
+lossdf <- data.table(
+  loss = c(lossBTC, lossETH, lossBNB, lossXRP, lossSOL),
+  crypto = rep(c("BTC","ETH","BNB","XRP","SOL"),
+               times = c(length(lossBTC),
+                         length(lossETH),
+                         length(lossBNB),
+                         length(lossXRP),
+                         length(lossSOL)))
+)
+
+
+# Analisi Univariant
+
+library(dplyr)
+
+desc_table <- lossdf %>%
+  group_by(crypto) %>%
+  summarise(
+    n = n(),
+    mean = mean(loss),
+    sd = sd(loss),
+    min = min(loss),
+    max = max(loss)
+  )
+
+print(desc_table)
+
+library(ggplot2)
+
+ggplot(lossdf, aes(x = loss)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 80,
+                 fill = "grey70",
+                 color = "black") +
+  geom_density(color = "red", linewidth = 1) +
+  facet_wrap(~crypto, scales = "free") +
+  labs(
+    title = "Distribució de les pèrdues (log-retorns negatius)",
+    x = "Loss",
+    y = "Densitat"
+  ) +
+  theme_minimal()
+
+ggplot(lossdf, aes(x = crypto, y = loss)) +
+  geom_boxplot() +
+  scale_y_continuous(trans = "log1p") +
+  labs(
+    title = "Comparació de pèrdues extremes (escala log)",
+    x = "",
+    y = "Loss"
+  ) +
+  theme_minimal()
+
+ggplot(lossdf, aes(x = loss, color = crypto)) +
+  stat_ecdf(linewidth = 1) +
+  scale_x_continuous(limits = quantile(lossdf$loss, c(0, 0.995))) +
+  labs(
+    title = "Funcions de distribució empíriques (zona central)",
+    x = "Loss",
+    y = "F(x)"
+  ) +
+  theme_minimal()
+
+loss_tail <- lossdf %>%
+  group_by(crypto) %>%
+  filter(loss > quantile(loss, 0.99))
+
+ggplot(loss_tail, aes(x = loss, color = crypto)) +
+  stat_ecdf(linewidth = 1) +
+  labs(
+    title = "Comportament de les cues (percentil 99+)",
+    x = "Loss",
+    y = "F(x)"
+  ) +
+  theme_minimal()
+
+
+# Correlacions
+
+losses <- na.omit(cbind(lossBTC, lossETH, lossBNB, lossXRP, lossSOL))
+colnames(losses) <- c("BTC","ETH","BNB","XRP","SOL")
+
+cor(losses)
+
+cor(losses, method = "spearman")
+
+
+
+# Selecció del llindar (POT) BTC
+
+library(evir)
+library(ercv)
+library(ismev)
+
+cvplot(lossBTC)
+
+u_seq <- quantile(lossBTC, seq(0.8, 0.999, by = 0.001))
+
+xi_hat <- sapply(u_seq, function(u) {
+  fit <- gpd.fit(lossBTC, threshold = u, show = FALSE)
+  fit$mle[2]
+})
+
+plot(u_seq, xi_hat, type = "b",
+     xlab = "Llindar",
+     ylab = "ksi",
+     main = "Estabilitat del paràmetre de cua (BTC)")
+abline(h = mean(xi_hat), col = "red")
+
+
+# Selecció del llindar (POT) ETH
+
+library(evir)
+library(ercv)
+library(ismev)
+
+cvplot(lossETH)
+
+u_seq <- quantile(lossETH, seq(0.8, 0.999, by = 0.001))
+
+xi_hat <- sapply(u_seq, function(u) {
+  fit <- gpd.fit(lossETH, threshold = u, show = FALSE)
+  fit$mle[2]
+})
+
+plot(u_seq, xi_hat, type = "b",
+     xlab = "Llindar",
+     ylab = "ksi",
+     main = "Estabilitat del paràmetre de cua (ETH)")
+abline(h = mean(xi_hat), col = "red")
+
+
+# Selecció del llindar (POT) BNB
+
+library(evir)
+library(ercv)
+library(ismev)
+
+cvplot(lossBNB)
+
+u_seq <- quantile(lossBNB, seq(0.8, 0.999, by = 0.001))
+
+xi_hat <- sapply(u_seq, function(u) {
+  fit <- gpd.fit(lossBNB, threshold = u, show = FALSE)
+  fit$mle[2]
+})
+
+plot(u_seq, xi_hat, type = "b",
+     xlab = "Llindar",
+     ylab = "ksi",
+     main = "Estabilitat del paràmetre de cua (BNB)")
+abline(h = mean(xi_hat), col = "red")
+
+
+# Selecció del llindar (POT) XRP
+
+library(evir)
+library(ercv)
+library(ismev)
+
+cvplot(lossXRP)
+
+u_seq <- quantile(lossXRP, seq(0.8, 0.999, by = 0.001))
+
+xi_hat <- sapply(u_seq, function(u) {
+  fit <- gpd.fit(lossXRP, threshold = u, show = FALSE)
+  fit$mle[2]
+})
+
+plot(u_seq, xi_hat, type = "b",
+     xlab = "Llindar",
+     ylab = "ksi",
+     main = "Estabilitat del paràmetre de cua (XRP)")
+abline(h = mean(xi_hat), col = "red")
+
+
+# Selecció del llindar (POT) SOL
+
+library(evir)
+library(ercv)
+library(ismev)
+
+cvplot(lossSOL)
+
+u_seq <- quantile(lossSOL, seq(0.8, 0.999, by = 0.001))
+
+xi_hat <- sapply(u_seq, function(u) {
+  fit <- gpd.fit(lossSOL, threshold = u, show = FALSE)
+  fit$mle[2]
+})
+
+plot(u_seq, xi_hat, type = "b",
+     xlab = "Llindar",
+     ylab = "ksi",
+     main = "Estabilitat del paràmetre de cua (SOL)")
+abline(h = mean(xi_hat), col = "red")
+
+# VaR
+qpot(alfa, modBTC)
+
+# ES
+epot(alfa, modBTC)
+
+cbind(
+  Manual = VaRBTC,
+  Funcio = qpot(alfa, modBTC)
+)
+
+# Ajust amb fpot
+
+library(evir)
+
+fitBTC_fpot <- fpot(lossBTC, threshold = uBTC)
+
+fitBTC_fpot$estimate
+
+rbind(
+  gpd_fit = modBTC$mle,
+  fpot = fitBTC_fpot$estimate
+)
+
 
 # Llindar
 
@@ -56,6 +279,12 @@ params <- data.frame(
 )
 
 print(params)
+
+# Domini d'atracció del màxim
+
+alpha <- 1 / params$xi
+data.frame(params$criptomoneda, alpha)
+
 
 # VaR i ES
 
