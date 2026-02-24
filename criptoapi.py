@@ -10,13 +10,10 @@ import sys
 import os
 from typing import Dict
 
-# Earliest date Binance has meaningful data for most pairs
-BINANCE_GENESIS = datetime(2017, 1, 1, tzinfo=timezone.utc)
+BINANCE0 = datetime(2017, 1, 1, tzinfo=timezone.utc)
 
-# When scanning forward to find a pair's actual start, jump in 30-day chunks
-# instead of 1000-minute chunks — much faster over months of no data
-SCAN_JUMP = timedelta(days=30)
-BATCH_SIZE = timedelta(minutes=1000)
+Escaneig = timedelta(days=30)
+Batch1000 = timedelta(minutes=1000)
 
 
 class BinanceDataAPI:
@@ -46,9 +43,9 @@ class BinanceDataAPI:
     def datetimems(self, dt: datetime) -> int:
         return int(dt.timestamp() * 1000)
 
-    def fetch_klines(self, symbol: str, inici: datetime, final: datetime, limit: int = 1000):
+    def buscaklines(self, simbol: str, inici: datetime, final: datetime, limit: int = 1000):
         params = {
-            "symbol": symbol,
+            "symbol": simbol,
             "interval": "1m",
             "startTime": self.datetimems(inici),
             "endTime": self.datetimems(final),
@@ -58,37 +55,32 @@ class BinanceDataAPI:
         response.raise_for_status()
         return response.json()
 
-    def find_pair_start(self, symbol: str, inici: datetime, final: datetime) -> datetime:
-        """
-        Scan forward in 30-day jumps to find the first date this pair has data.
-        Returns the actual start date, or None if no data found at all.
-        """
+    def inicicrypto(self, simbol: str, inici: datetime, final: datetime) -> datetime:
         cursor = inici
         while cursor < final:
-            chunk_end = min(cursor + SCAN_JUMP, final)
+            finalchunk = min(cursor + Escaneig, final)
             try:
-                klines = self.fetch_klines(symbol, cursor, chunk_end, limit=1)
+                klines = self.buscaklines(simbol, cursor, finalchunk, limit=1)
                 if klines:
                     actual_start = self.msdatetime(klines[0][0])
-                    print(f"  Primera dada trobada: {actual_start.date()}")
+                    print(f"Primera dada trobada: {actual_start.date()}")
                     return actual_start
             except requests.exceptions.RequestException:
-                pass  # network hiccup — just keep scanning
-            cursor = chunk_end + timedelta(milliseconds=1)
+                pass
+            cursor = finalchunk + timedelta(milliseconds=1)
             time.sleep(0.05)
         return None
 
     def dadeshistoriques(self, pair: str, inici: datetime, final: datetime,
                          guardarcsv: bool = True, output_dir: str = "."):
 
-        symbol = self.simbols[pair]
+        simbol = self.simbols[pair]
         dies = (final - inici).days
         velesaprox = dies * 24 * 60
         print(f"\n[{pair}] Veles aproximades: ~{velesaprox:,} ({inici.date()} -> {final.date()})")
-        print(f"  Cercant inici real del parell...")
+        print(f"Cercant inici real del parell...")
 
-        # Fast-forward to the first date this pair actually has data
-        actual_start = self.find_pair_start(symbol, inici, final)
+        actual_start = self.inicicrypto(simbol, inici, final)
         if actual_start is None:
             print(f"  [{pair}] Cap dada disponible en tot el rang.")
             return pd.DataFrame()
@@ -99,14 +91,13 @@ class BinanceDataAPI:
         intentsmax = 5
 
         while iniciactual < final:
-            batchfinal = min(iniciactual + BATCH_SIZE, final)
+            batchfinal = min(iniciactual + Batch1000, final)
 
             try:
-                klines = self.fetch_klines(symbol, iniciactual, batchfinal)
+                klines = self.buscaklines(simbol, iniciactual, batchfinal)
                 comptereint = 0
 
                 if not klines:
-                    # Genuine gap mid-stream — advance past it
                     iniciactual = batchfinal + timedelta(milliseconds=1)
                     time.sleep(0.05)
                     continue
@@ -138,7 +129,6 @@ class BinanceDataAPI:
 
         df = pd.DataFrame(dadescomp, columns=self.columnes)
 
-        # Rename open_time -> date for easy cross-pair joining
         df = df.rename(columns={"open_time": "date"})
         df["date"] = pd.to_datetime(df["date"], unit="ms", utc=True)
         df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
@@ -157,7 +147,7 @@ class BinanceDataAPI:
         if guardarcsv:
             os.makedirs(output_dir, exist_ok=True)
             date_tag = f"{inici.strftime('%Y%m%d')}_{final.strftime('%Y%m%d')}"
-            filename = f"{output_dir}/{symbol}_1m_{date_tag}.csv"
+            filename = f"{output_dir}/{simbol}_1m_{date_tag}.csv"
             df.to_csv(filename, index=False)
             print(f"  Guardat: {filename}")
 
@@ -177,7 +167,6 @@ class CryptoDataAPI:
     def obtenirtot(self, inici: datetime, final: datetime, output_dir: str = "."):
         return self.binance.obtparells(inici, final, output_dir)
 
-
 def resum(data: Dict[str, pd.DataFrame]):
     for pair, df in data.items():
         print(f"\n{pair}:")
@@ -195,14 +184,6 @@ def resum(data: Dict[str, pd.DataFrame]):
 
 
 def merge_by_date(data: Dict[str, pd.DataFrame], col: str = "close") -> pd.DataFrame:
-    """
-    Returns a wide DataFrame indexed by date (UTC), one column per pair.
-    Use for correlations, spread analysis, or any cross-pair computation.
-
-    Example:
-        merged = merge_by_date(data, col="close")
-        corr = merged.corr()
-    """
     frames = {
         pair: df.set_index("date")[col].rename(pair)
         for pair, df in data.items()
@@ -253,7 +234,7 @@ Exemples:
     if args.days is not None:
         inici = final - timedelta(days=args.days)
     else:
-        inici = parse_date(args.start) if args.start else BINANCE_GENESIS
+        inici = parse_date(args.start) if args.start else BINANCE0
         final = parse_date(args.end) if args.end else final
 
     api = CryptoDataAPI()
