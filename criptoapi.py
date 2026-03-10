@@ -8,255 +8,294 @@ import time
 import argparse
 import sys
 import os
-from typing import Dict
+from typing import Optional
 
-BINANCE0 = datetime(2017, 1, 1, tzinfo=timezone.utc)
+GENESIS_BINANCE = datetime(2017, 1, 1, tzinfo=timezone.utc)
+SALT_ESCANEIG   = timedelta(days=30)
+MIDA_LOT        = timedelta(minutes=1000)
+COLS_OHLC       = ["data", "open", "max", "min", "close"]
 
-Escaneig = timedelta(days=30)
-Batch1000 = timedelta(minutes=1000)
+PARELLS = {
+    "BTC/USD": {"binance": "BTCUSDT",  "kraken": "XBTUSD",  "coingecko": "bitcoin"},
+    "ETH/USD": {"binance": "ETHUSDT",  "kraken": "ETHUSD",  "coingecko": "ethereum"},
+    "BNB/USD": {"binance": "BNBUSDT",  "kraken": None,      "coingecko": "binancecoin"},
+    "XRP/USD": {"binance": "XRPUSDT",  "kraken": "XRPUSD",  "coingecko": "ripple"},
+    "SOL/USD": {"binance": "SOLUSDT",  "kraken": "SOLUSD",  "coingecko": "solana"},
+}
+
+def _ms_a_dt(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+
+def _dt_a_ms(dt: datetime) -> int:
+    return int(dt.timestamp() * 1000)
+
+def _get_segur(sessio: requests.Session, url: str, params: dict, timeout: int = 30) -> Optional[dict]:
+    try:
+        resposta = sessio.get(url, params=params, timeout=timeout)
+        resposta.raise_for_status()
+        return resposta.json()
+    except Exception:
+        return None
 
 
-class BinanceDataAPI:
-    baseURL = "https://api.binance.com/api/v3/klines"
-
-    simbols = {
-        "BTC/USD": "BTCUSDT",
-        "ETH/USD": "ETHUSDT",
-        "BNB/USD": "BNBUSDT",
-        "XRP/USD": "XRPUSDT",
-        "SOL/USD": "SOLUSDT"
-    }
-
-    columnes = [
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "quote_volume", "trades", "taker_buy_base",
-        "taker_buy_quote", "ignore"
-    ]
+class FontBinance:
+    URL  = "https://api.binance.com/api/v3/klines"
+    NOM  = "Binance"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "CryptoDataAPI/1.0"})
+        self.sessio = requests.Session()
+        self.sessio.headers.update({"User-Agent": "CryptoDataAPI/1.0"})
 
-    def msdatetime(self, ms: int) -> datetime:
-        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
-
-    def datetimems(self, dt: datetime) -> int:
-        return int(dt.timestamp() * 1000)
-
-    def buscaklines(self, simbol: str, inici: datetime, final: datetime, limit: int = 1000):
+    def _obtenir_raw(self, simbol: str, inici: datetime, final: datetime, limit: int = 1000):
         params = {
-            "symbol": simbol,
-            "interval": "1m",
-            "startTime": self.datetimems(inici),
-            "endTime": self.datetimems(final),
-            "limit": limit
+            "symbol":    simbol,
+            "interval":  "1m",
+            "startTime": _dt_a_ms(inici),
+            "endTime":   _dt_a_ms(final),
+            "limit":     limit,
         }
-        response = self.session.get(self.baseURL, params=params, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        return _get_segur(self.sessio, self.URL, params)
 
-    def inicicrypto(self, simbol: str, inici: datetime, final: datetime) -> datetime:
+    def _trobar_inici(self, simbol: str, inici: datetime, final: datetime) -> Optional[datetime]:
         cursor = inici
         while cursor < final:
-            finalchunk = min(cursor + Escaneig, final)
-            try:
-                klines = self.buscaklines(simbol, cursor, finalchunk, limit=1)
-                if klines:
-                    actual_start = self.msdatetime(klines[0][0])
-                    print(f"Primera dada trobada: {actual_start.date()}")
-                    return actual_start
-            except requests.exceptions.RequestException:
-                pass
-            cursor = finalchunk + timedelta(milliseconds=1)
+            final_tros = min(cursor + SALT_ESCANEIG, final)
+            veles = self._obtenir_raw(simbol, cursor, final_tros, limit=1)
+            if veles:
+                return _ms_a_dt(veles[0][0])
+            cursor = final_tros + timedelta(milliseconds=1)
             time.sleep(0.05)
         return None
 
-    def dadeshistoriques(self, pair: str, inici: datetime, final: datetime,
-                         guardarcsv: bool = True, output_dir: str = "."):
-
-        simbol = self.simbols[pair]
-        dies = (final - inici).days
-        velesaprox = dies * 24 * 60
-        print(f"\n[{pair}] Veles aproximades: ~{velesaprox:,} ({inici.date()} -> {final.date()})")
-        print(f"Cercant inici real del parell...")
-
-        actual_start = self.inicicrypto(simbol, inici, final)
-        if actual_start is None:
-            print(f"  [{pair}] Cap dada disponible en tot el rang.")
+    def obtenir(self, parell: str, inici: datetime, final: datetime) -> pd.DataFrame:
+        simbol = PARELLS[parell]["binance"]
+        if simbol is None:
             return pd.DataFrame()
 
-        dadescomp = []
-        iniciactual = actual_start
-        comptereint = 0
-        intentsmax = 5
+        inici_real = self._trobar_inici(simbol, inici, final)
+        if inici_real is None:
+            return pd.DataFrame()
 
-        while iniciactual < final:
-            batchfinal = min(iniciactual + Batch1000, final)
+        files = []
+        cursor = inici_real
+        reintents = 0
 
-            try:
-                klines = self.buscaklines(simbol, iniciactual, batchfinal)
-                comptereint = 0
+        while cursor < final:
+            final_lot = min(cursor + MIDA_LOT, final)
+            veles = self._obtenir_raw(simbol, cursor, final_lot)
 
-                if not klines:
-                    iniciactual = batchfinal + timedelta(milliseconds=1)
-                    time.sleep(0.05)
-                    continue
-
-                dadescomp.extend(klines)
-
-                progress = (iniciactual - actual_start) / (final - actual_start) * 100
-                sys.stdout.write(f"\r  Progres: {progress:.1f}% ({len(dadescomp):,} veles)")
-                sys.stdout.flush()
-
-                ultimtancament = klines[-1][6]
-                iniciactual = self.msdatetime(ultimtancament + 1)
-                time.sleep(0.1)
-
-            except requests.exceptions.RequestException as e:
-                comptereint += 1
-                if comptereint > intentsmax:
-                    print(f"\n  Intents maxims assolits. Error: {e}")
+            if veles is None:
+                reintents += 1
+                if reintents > 5:
                     break
-                print(f"\n  Error: {e}. Reintent {comptereint}/{intentsmax}")
-                time.sleep(2 ** comptereint)
+                time.sleep(2 ** reintents)
                 continue
 
-        print(f"\r  Progres: 100% ({len(dadescomp):,} veles)  ")
+            reintents = 0
+            if not veles:
+                cursor = final_lot + timedelta(milliseconds=1)
+                time.sleep(0.05)
+                continue
 
-        if not dadescomp:
-            print(f"  [{pair}] Cap dada obtinguda.")
+            for v in veles:
+                files.append({
+                    "data":      _ms_a_dt(v[0]),
+                    "open":  float(v[1]),
+                    "max":     float(v[2]),
+                    "min":     float(v[3]),
+                    "close": float(v[4]),
+                })
+
+            pct = (cursor - inici_real) / max((final - inici_real), timedelta(seconds=1)) * 100
+            sys.stdout.write(f"\r  [{self.NOM}] {pct:.1f}%  ({len(files):,} veles)")
+            sys.stdout.flush()
+
+            cursor = _ms_a_dt(veles[-1][6] + 1)
+            time.sleep(0.1)
+
+        sys.stdout.write("\r" + " " * 60 + "\r")
+        return pd.DataFrame(files, columns=COLS_OHLC) if files else pd.DataFrame()
+
+
+class FontKraken:
+    URL  = "https://api.kraken.com/0/public/OHLC"
+    NOM  = "Kraken"
+    TROS = timedelta(minutes=720)
+
+    def __init__(self):
+        self.sessio = requests.Session()
+        self.sessio.headers.update({"User-Agent": "CryptoDataAPI/1.0"})
+
+    def obtenir(self, parell: str, inici: datetime, final: datetime) -> pd.DataFrame:
+        simbol = PARELLS[parell]["kraken"]
+        if not simbol:
             return pd.DataFrame()
 
-        df = pd.DataFrame(dadescomp, columns=self.columnes)
+        files = []
+        cursor = inici
 
-        df = df.rename(columns={"open_time": "date"})
-        df["date"] = pd.to_datetime(df["date"], unit="ms", utc=True)
-        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
+        while cursor < final:
+            des_de = int(cursor.timestamp())
+            dades = _get_segur(self.sessio, self.URL, {"pair": simbol, "interval": 1, "since": des_de})
 
-        df = df[(df["date"] >= inici) & (df["date"] <= final)]
+            if dades is None or dades.get("error"):
+                break
 
-        for col in ["open", "high", "low", "close", "volume", "quote_volume",
-                    "taker_buy_base", "taker_buy_quote"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+            resultat = dades.get("result", {})
+            ohlc = resultat.get(simbol) or resultat.get(list(resultat.keys())[0], []) if resultat else []
 
-        df["trades"] = df["trades"].astype(int)
-        df = df.drop(columns=["ignore"])
-        df = df.drop_duplicates(subset=["date"])
-        df = df.sort_values("date").reset_index(drop=True)
+            if not ohlc:
+                cursor += self.TROS
+                time.sleep(0.5)
+                continue
 
-        if guardarcsv:
-            os.makedirs(output_dir, exist_ok=True)
-            date_tag = f"{inici.strftime('%Y%m%d')}_{final.strftime('%Y%m%d')}"
-            filename = f"{output_dir}/{simbol}_1m_{date_tag}.csv"
-            df.to_csv(filename, index=False)
-            print(f"  Guardat: {filename}")
+            for v in ohlc:
+                ts = datetime.fromtimestamp(v[0], tz=timezone.utc)
+                if inici <= ts <= final:
+                    files.append({
+                        "data":      ts,
+                        "open":  float(v[1]),
+                        "max":     float(v[2]),
+                        "min":     float(v[3]),
+                        "close": float(v[4]),
+                    })
 
+            pct = (cursor - inici) / max((final - inici), timedelta(seconds=1)) * 100
+            sys.stdout.write(f"\r  [{self.NOM}] {pct:.1f}%  ({len(files):,} veles)")
+            sys.stdout.flush()
+
+            cursor = datetime.fromtimestamp(ohlc[-1][0], tz=timezone.utc) + timedelta(minutes=1)
+            time.sleep(0.5)
+
+        sys.stdout.write("\r" + " " * 60 + "\r")
+        return pd.DataFrame(files, columns=COLS_OHLC) if files else pd.DataFrame()
+
+
+class FontCoinGecko:
+    URL = "https://api.coingecko.com/api/v3/coins/{id}/market_chart/range"
+    NOM = "CoinGecko"
+
+    def __init__(self):
+        self.sessio = requests.Session()
+        self.sessio.headers.update({"User-Agent": "CryptoDataAPI/1.0"})
+
+    def obtenir(self, parell: str, inici: datetime, final: datetime) -> pd.DataFrame:
+        id_moneda = PARELLS[parell]["coingecko"]
+        if not id_moneda:
+            return pd.DataFrame()
+
+        url = self.URL.format(id=id_moneda)
+        params = {"vs_currency": "usd", "from": int(inici.timestamp()), "to": int(final.timestamp())}
+        dades = _get_segur(self.sessio, url, params, timeout=60)
+
+        if not dades or "prices" not in dades:
+            return pd.DataFrame()
+
+        files = []
+        for ms, preu in dades["prices"]:
+            ts = datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+            files.append({"data": ts, "open": preu, "max": preu, "min": preu, "close": preu})
+
+        return pd.DataFrame(files, columns=COLS_OHLC) if files else pd.DataFrame()
+
+
+class APIDades:
+    def __init__(self):
+        self.fonts = [FontBinance(), FontKraken(), FontCoinGecko()]
+
+    def obtenir_parell(self, parell: str, inici: datetime, final: datetime, directori: str = ".") -> pd.DataFrame:
+        print(f"\n[{parell}]  {inici.date()} → {final.date()}")
+
+        df = pd.DataFrame()
+        for font in self.fonts:
+            print(f"  Intentant {font.NOM}...")
+            try:
+                df = font.obtenir(parell, inici, final)
+            except Exception as e:
+                print(f"  {font.NOM} ha tingut l'exception: {e}")
+                df = pd.DataFrame()
+
+            if not df.empty:
+                print(f"  ✓ {font.NOM}: {len(df):,} veles")
+                break
+            else:
+                print(f"  ✗ {font.NOM}: sense dades")
+
+        if df.empty:
+            print(f"  No hi ha dades per {parell}.")
+            return df
+
+        df = df.drop_duplicates(subset=["data"]).sort_values("data").reset_index(drop=True)
+        df = df[(df["data"] >= inici) & (df["data"] <= final)]
+
+        os.makedirs(directori, exist_ok=True)
+        parell_net = parell.replace("/", "")
+        etiqueta   = f"{inici.strftime('%Y%m%d')}_{final.strftime('%Y%m%d')}"
+        fitxer     = os.path.join(directori, f"{parell_net}_1m_{etiqueta}.csv")
+        df[COLS_OHLC].to_csv(fitxer, index=False)
+        print(f"  Guardat a: {fitxer}")
         return df
 
-    def obtparells(self, inici: datetime, final: datetime, output_dir: str = "."):
-        data = {}
-        for pair in self.simbols.keys():
-            data[pair] = self.dadeshistoriques(pair, inici, final, output_dir=output_dir)
-        return data
+    def obtenir_tot(self, inici: datetime, final: datetime, directori: str = ".") -> dict:
+        resultats = {}
+        for parell in PARELLS:
+            resultats[parell] = self.obtenir_parell(parell, inici, final, directori)
+        return resultats
 
 
-class CryptoDataAPI:
-    def __init__(self):
-        self.binance = BinanceDataAPI()
-
-    def obtenirtot(self, inici: datetime, final: datetime, output_dir: str = "."):
-        return self.binance.obtparells(inici, final, output_dir)
-
-def resum(data: Dict[str, pd.DataFrame]):
-    for pair, df in data.items():
-        print(f"\n{pair}:")
+def resum(dades: dict):
+    print("\n Resum:")
+    for parell, df in dades.items():
+        print(f"\n{parell}:")
         if df.empty:
-            print("  Sense dades.")
+            print("  Sense dades")
             continue
-        print(f"  Nombre de dades: {len(df):,}")
-        print(f"  Dates: {df['date'].min()} ; {df['date'].max()}")
-        print(f"  Rang de preus: ${df['low'].min():,.2f} ; ${df['high'].max():,.2f}")
-        print(f"  Ultim tancament: ${df['close'].iloc[-1]:,.2f}")
-        print(f"  Volum total: {df['volume'].sum():,.2f}")
-        returns = df['close'].pct_change().dropna()
-        print(f"  Retorn mitja (per minut): {returns.mean() * 100:.6f}%")
-        print(f"  Volatilitat anualitzada: {returns.std() * np.sqrt(365 * 24 * 60) * 100:.1f}%")
+        print(f"  Veles        : {len(df):,}")
+        print(f"  Des de       : {df['data'].min()}")
+        print(f"  Fins a       : {df['data'].max()}")
+        print(f"  Rang de preu : ${df['min'].min():,.2f} – ${df['max'].max():,.2f}")
+        print(f"  Últim tanc.  : ${df['close'].iloc[-1]:,.2f}")
+        retorns = df['close'].pct_change().dropna()
+        print(f"  Vol. An.     : {retorns.std() * np.sqrt(365*24*60) * 100:.1f}%")
 
 
-def merge_by_date(data: Dict[str, pd.DataFrame], col: str = "close") -> pd.DataFrame:
-    frames = {
-        pair: df.set_index("date")[col].rename(pair)
-        for pair, df in data.items()
-        if not df.empty
-    }
-    if not frames:
-        return pd.DataFrame()
-    merged = pd.concat(frames.values(), axis=1, join="outer")
-    merged.index.name = "date"
-    return merged.sort_index()
-
-
-def tempsaprox(inici: datetime, final: datetime, num_pairs: int = 5) -> float:
-    dies = (final - inici).days
-    velesperpair = dies * 24 * 60
-    reqperpair = velesperpair // 1000 + 1
-    return reqperpair * 0.15 * num_pairs / 60
-
-
-def parse_date(s: str) -> datetime:
+def _parsejar_data(s: str) -> datetime:
     return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="API per obtenir dades de 1 minut pels parells de criptomonedes",
+    analitzador = argparse.ArgumentParser(
+        description="API per obtenir dades de Criptomonedes (Alterna entre Binance, Kraken i CoinGecko per si algun falla)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples:
-  python criptoapi.py                               # Tot l'historial (des de 2017-01-01)
-  python criptoapi.py --start 2021-01-01            # Des d'una data fins avui
-  python criptoapi.py --start 2023-01-01 --end 2023-12-31
-  python criptoapi.py --days 30                     # Ultims 30 dies
+  python criptoapi.py
+  python criptoapi.py --inici 2023-01-01
+  python criptoapi.py --inici 2023-01-01 --final 2023-12-31
+  python criptoapi.py --dies 30
+  python criptoapi.py --dies 7 --sortida ./dades
         """
     )
-    parser.add_argument("--start", type=str, default=None,
-                        help="Data d'inici (YYYY-MM-DD). Per defecte: 2017-01-01")
-    parser.add_argument("--end", type=str, default=None,
-                        help="Data de fi (YYYY-MM-DD). Per defecte: avui")
-    parser.add_argument("--days", type=int, default=None,
-                        help="Alternativa: ultims N dies (sobreescriu --start/--end)")
-    parser.add_argument("--output", type=str, default=".",
-                        help="Directori per als CSVs (per defecte: directori actual)")
-    args = parser.parse_args()
+    analitzador.add_argument("--inici",   type=str, default=None)
+    analitzador.add_argument("--final",   type=str, default=None)
+    analitzador.add_argument("--dies",    type=int, default=None)
+    analitzador.add_argument("--sortida", type=str, default=".")
+    args = analitzador.parse_args()
 
-    final = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    ara = datetime.now(timezone.utc).replace(second=0, microsecond=0)
 
-    if args.days is not None:
-        inici = final - timedelta(days=args.days)
+    if args.dies is not None:
+        inici = ara - timedelta(days=args.dies)
+        final = ara
     else:
-        inici = parse_date(args.start) if args.start else BINANCE0
-        final = parse_date(args.end) if args.end else final
+        inici = _parsejar_data(args.inici) if args.inici else GENESIS_BINANCE
+        final = _parsejar_data(args.final) if args.final else ara
 
-    api = CryptoDataAPI()
-    temps = tempsaprox(inici, final, num_pairs=5)
-    print(f"\nRang: {inici.date()} -> {final.date()}")
-    print(f"Temps aproximat: ~{temps:.0f} minuts")
-
-    data = api.obtenirtot(inici=inici, final=final, output_dir=args.output)
-
-    print("\n--- Resum ---")
-    resum(data)
-
-    merged = merge_by_date(data, col="close")
-    if not merged.empty:
-        date_tag = f"{inici.strftime('%Y%m%d')}_{final.strftime('%Y%m%d')}"
-        merged_path = f"{args.output}/merged_close_{date_tag}.csv"
-        os.makedirs(args.output, exist_ok=True)
-        merged.to_csv(merged_path)
-        print(f"\nMerged close prices guardat: {merged_path}")
-
+    api   = APIDades()
+    dades = api.obtenir_tot(inici=inici, final=final, directori=args.sortida)
+    resum(dades)
     print("\nFet.")
-    return data
+    return dades
 
 
 if __name__ == "__main__":
