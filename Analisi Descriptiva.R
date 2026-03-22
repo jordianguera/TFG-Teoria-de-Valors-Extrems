@@ -36,6 +36,9 @@ dfbind <- rbindlist(list(BTC,ETH,BNB,XRP,SOL))
 dfbind[, loss := ifelse(r < 0, -r, NA)]
 lossdf <- dfbind[!is.na(loss)]
 
+dfbind[, datahora := as.POSIXct(cut(date, "1 hour"))]
+dfbind[, datadia := as.Date(date)]
+
 tauladescriptiva <- lossdf %>%
   group_by(crypto) %>%
   summarise(
@@ -77,37 +80,96 @@ print(
 
 # Funcions pels gràfics
 
-plotpreu <- function(df,nom){
-  
-  ggplot(df,aes(x=date,y=close))+
-    geom_line(color="steelblue")+
-    labs(title=paste("Sèrie temporal del preu:",nom),
-         x="Data",
-         y="Preu")+
-    theme_minimal()
-  
+guardarplot <- function(plot, fitxer, nom) {
+  nom_fitxer <- paste0(fitxer, nom, ".png")
+  ggsave(nom_fitxer, plot = plot, width = 8, height = 6, dpi = 300)
 }
 
-plotretorns <- function(df,nom){
-  
-  ggplot(df,aes(x=date,y=r))+
-    geom_line(color="darkred")+
-    labs(title=paste("Log-retorns:",nom),
-         x="Data",
-         y="Log-retorn")+
+plotpreu <- function(df, nom){
+  p <- ggplot(df, aes(x = date, y = close)) +
+    geom_line(color = "steelblue") +
+    labs(title = paste("Sèrie temporal del preu:", nom),
+         x = "Data",
+         y = "Preu") +
+    theme_minimal()
+  guardarplot(p,"SerieCompleta_", nom)
+}
+
+
+plotretorns <- function(df, nom){
+  p <- ggplot(df, aes(x = date, y = r)) +
+    geom_line(color = "darkred") +
+    labs(title = paste("Log-retorns:", nom),
+         x = "Data",
+         y = "Log-retorn") +
+    theme_minimal()
+  guardarplot(p,"Logretorns_", nom)
+}
+
+plotperduesminut <- function(df, nom){
+  p <- ggplot(df[crypto==nom & !is.na(loss)], aes(x=date, y=loss)) +
+    geom_line(color="darkred") +
+    labs(title=paste("Log-pèrdues minut:", nom),
+         x="Temps",
+         y="Pèrdua") +
     theme_minimal()
   
+  guardarplot(p, "PerduesMinut_", nom)
 }
+
+plotperdueshora <- function(df, nom){
+  dades <- df[, .(
+    perdua = sum(pmax(-r,0), na.rm=TRUE)
+  ), by=.(crypto, datahora)]
+  
+  p <- ggplot(dades[crypto==nom], aes(x=datahora, y=perdua)) +
+    geom_line(color="darkred") +
+    labs(title=paste("Log-pèrdues per hora:", nom),
+         x="Temps",
+         y="Pèrdua") +
+    theme_minimal()
+  
+  guardarplot(p, "PerduesHora_", nom)
+}
+
+plotperduesdia <- function(df, nom){
+  dades <- df[, .(
+    perdua = sum(pmax(-r,0), na.rm=TRUE)
+  ), by=.(crypto, datadia)]
+  
+  p <- ggplot(dades[crypto==nom], aes(x=datadia, y=perdua)) +
+    geom_line(color="darkred") +
+    labs(title=paste("Log-pèrdues diàries:", nom),
+         x="Temps",
+         y="Pèrdua") +
+    theme_minimal()
+  
+  guardarplot(p, "PerduesDia_", nom)
+}
+
+plotcomparacio <- function(df){
+  dades <- df[, .(
+    perdua = sum(pmax(-r,0), na.rm=TRUE)
+  ), by=.(crypto, datadia)]
+  
+  p <- ggplot(dades, aes(x=datadia, y=perdua, color=crypto)) +
+    geom_line() +
+    labs(title="Comparació de pèrdues diàries",
+         x="Temps",
+         y="Pèrdua") +
+    theme_minimal()
+  
+  guardarplot(p, "ComparacioPerdues_", "Totes")
+}
+
 
 plothist <- function(df,nom){
-  
   ggplot(df,aes(x=r))+
     geom_histogram(bins=100,fill="steelblue",alpha=0.7)+
     labs(title=paste("Distribució dels log-retorns:",nom),
          x="Log-retorn",
          y="Freqüència")+
     theme_minimal()
-  
 }
 
 # qqplot
@@ -132,10 +194,67 @@ plotpreu(BNB,"BNB")
 plotpreu(XRP,"XRP")
 plotpreu(SOL,"SOL")
 
-# Descriptiva dels logretorns negatius
+# Descriptiva dels retorns
 
 plotretorns(BTC,"BTC")
 plotretorns(ETH,"ETH")
+plotretorns(BNB,"BNB")
+plotretorns(XRP,"XRP")
+plotretorns(SOL,"SOL")
+
+# Descriptiva dels logretorns negatius
+
+criptos <- c("BTC","ETH","BNB","XRP","SOL")
+
+for (c in criptos){
+  plotperduesminut(dfbind, c)
+  plotperdueshora(dfbind, c)
+  plotperduesdia(dfbind, c)
+}
+
+# punt més extrem (retorn més negatiu)
+extremBTC <- BTC[which.min(r)]
+
+t0 <- extremBTC$date
+
+# finestra +- 6 hores
+
+finestra <- dfbind[
+  date >= (t0 - 6*3600) & date <= (t0 + 6*3600)
+]
+
+# Funcio finestra
+
+plotvelesfinestra <- function(df, nom){
+  dades <- df[crypto == nom]
+  
+  p <- ggplot(dades, aes(x=date)) +
+    geom_segment(aes(y=min, yend=max, xend=date), color="black") +
+    geom_rect(aes(
+      xmin=date-30,
+      xmax=date+30,
+      ymin=pmin(open,close),
+      ymax=pmax(open,close),
+      fill=close>open
+    )) +
+    scale_fill_manual(values=c("red","green")) +
+    geom_vline(xintercept = as.numeric(t0), linetype="dashed")+
+    labs(title=paste("Candlestick finestra d'estrès:", nom),
+         subtitle=paste("Xoc BTC a:", format(t0)),
+         x="Temps",
+         y="Preu") +
+    theme_minimal() +
+    theme(legend.position="none")
+  
+  guardarplot(p, "CandlesFinestra_", nom)
+}
+
+
+criptos <- c("BTC","ETH","BNB","XRP","SOL")
+
+for (c in criptos){
+  plotvelesfinestra(finestra, c)
+}
 
 plothist(BTC,"BTC")
 plothist(ETH,"ETH")
