@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 library(data.table)
 library(tidyverse)
 library(moments)
@@ -30,7 +31,7 @@ SOL <- carrega("SOLUSD_1m_20170101_20260325.csv", "SOL")
 
 noms <- c("BTC", "ETH", "BNB", "XRP", "SOL")
 
-# 1.1 Neteja de dades
+# 1 Neteja de dades
 
 verifica <- function(df, nom) {
   cols <- c("data", "ober", "max", "min", "tanca")
@@ -279,7 +280,7 @@ qqplot <- function(df, nom, freq, var, etiq) {
 for (freq in names(freqs)) {
   # QQ retorns
   plotsr <- lapply(noms, function(n) qqplot(freqs[[freq]][[n]], n, freq, "ret", "log-retorns"))
-  pcomb  <- do.call(grid.arrange, c(plotsr, ncol = 2,
+  pcomb <- do.call(grid.arrange, c(plotsr, ncol = 2,
                                      top = paste0("QQ-plots log-retorns - Freqüència ", freq)))
   ggsave(paste0("QQRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
   
@@ -292,15 +293,15 @@ for (freq in names(freqs)) {
 
 # 8. ACF dels logretorns
 
-plot_acf_gg <- function(df, nom, freq, var, etiq, max_lag = 40) {
-  x    <- df[[var]]
+plotsacf <- function(df, nom, freq, var, etiq, max_lag = 40) {
+  x <- df[[var]]
   acf_res <- acf(x, lag.max = max_lag, plot = FALSE)
-  ic   <- qnorm(0.975) / sqrt(length(x))
-  df_acf <- data.frame(
+  ic <- qnorm(0.975) / sqrt(length(x))
+  taulaacf <- data.frame(
     retard = as.numeric(acf_res$lag[-1]),
     acf    = as.numeric(acf_res$acf[-1])
   )
-  ggplot(df_acf, aes(x = retard, y = acf)) +
+  ggplot(taulaacf, aes(x = retard, y = acf)) +
     geom_hline(yintercept = 0, color = "black") +
     geom_segment(aes(xend = retard, yend = 0), color = "steelblue") +
     geom_hline(yintercept = c(-ic, ic), linetype = "dashed", color = "red") +
@@ -310,18 +311,18 @@ plot_acf_gg <- function(df, nom, freq, var, etiq, max_lag = 40) {
 }
 
 for (freq in names(freqs)) {
-  lag_max <- if (freq == "1min") 60 else if (freq == "1hora") 48 else 30
+  lagmax <- if (freq == "1min") 60 else if (freq == "1hora") 48 else 30
   
   plotsr <- lapply(noms, function(n)
-    plot_acf_gg(freqs[[freq]][[n]], n, freq, "ret", "log-retorns", lag_max))
-  pcomb  <- do.call(grid.arrange, c(plotsr, ncol = 2,
+    plotsacf(freqs[[freq]][[n]], n, freq, "ret", "log-retorns", lagmax))
+  pcomb <- do.call(grid.arrange, c(plotsr, ncol = 2,
                                      top = paste0("ACF log-retorns - Freqüència ", freq)))
   ggsave(paste0("ACFRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
 }
 
 # 9. Clustering de volatilitat
 
-plot_vol_cluster <- function(df, nom, freq, col) {
+plotsvolcluster <- function(df, nom, freq, col) {
   df2 <- copy(df)
   df2[, absret := abs(ret)]
   ct  <- temps[[freq]]
@@ -334,9 +335,9 @@ plot_vol_cluster <- function(df, nom, freq, col) {
 
 for (freq in names(freqs)) {
   ct <- temps[[freq]]
-  plots_v <- lapply(noms, function(n)
-    plot_vol_cluster(freqs[[freq]][[n]], n, freq, ct))
-  pcomb  <- do.call(grid.arrange, c(plots_v, ncol = 2,
+  plotsvol <- lapply(noms, function(n)
+    plotsvolcluster(freqs[[freq]][[n]], n, freq, ct))
+  pcomb  <- do.call(grid.arrange, c(plotsvol, ncol = 2,
                                      top = paste0("Volatility clustering (|ret|) - Freqüència ", freq)))
   ggsave(paste0("VolCluster_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
 }
@@ -344,21 +345,21 @@ for (freq in names(freqs)) {
 # 10. ACF dels retorns absoluts
 
 for (freq in names(freqs)) {
-  lag_max <- if (freq == "1min") 60 else if (freq == "1hora") 48 else 30
+  lagmax <- if (freq == "1min") 60 else if (freq == "1hora") 48 else 30
   
   # ACF |retorns|
-  plots_abs <- lapply(noms, function(n) {
+  plotsretornabs <- lapply(noms, function(n) {
     df2 <- copy(freqs[[freq]][[n]])
     df2[, absret := abs(ret)]
-    plot_acf_gg(df2, n, freq, "absret", "|log-retorns|", lag_max)
+    plotsacf(df2, n, freq, "absret", "|log-retorns|", lagmax)
   })
-  pcomb <- do.call(grid.arrange, c(plots_abs, ncol = 2,
+  pcomb <- do.call(grid.arrange, c(plotsretornabs, ncol = 2,
                                     top = paste0("ACF |log-retorns| - Freqüència ", freq)))
   ggsave(paste0("ACFAbsRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
   
   # ACF pèrdues
   plotsperd <- lapply(noms, function(n)
-    plot_acf_gg(freqs[[freq]][[n]], n, freq, "perd", "log-pèrdues", lag_max))
+    plotsacf(freqs[[freq]][[n]], n, freq, "perd", "log-pèrdues", lagmax))
   pcomb2 <- do.call(grid.arrange, c(plotsperd, ncol = 2,
                                      top = paste0("ACF log-pèrdues - Freqüència ", freq)))
   ggsave(paste0("ACFPerd_", freq, ".png"), plot = pcomb2, width = 14, height = 16, dpi = 200)
@@ -366,7 +367,7 @@ for (freq in names(freqs)) {
 
 # 11. Matrius de correlació
 
-construeix_correlacio <- function(llista, freq, var) {
+matriucorrelacio <- function(llista, freq, var) {
   # Alinea per data comuna
   ct <- temps[[freq]]
   dfs <- lapply(noms, function(n) {
@@ -379,7 +380,7 @@ construeix_correlacio <- function(llista, freq, var) {
   return(mat)
 }
 
-plot_corr_gg <- function(mat, titol) {
+plotscorrelacio <- function(mat, titol) {
   df_melt <- as.data.frame(as.table(mat))
   names(df_melt) <- c("X", "Y", "Corr")
   ggplot(df_melt, aes(x = X, y = Y, fill = Corr)) +
@@ -394,18 +395,13 @@ plot_corr_gg <- function(mat, titol) {
 
 for (freq in names(freqs)) {
   # Correlació retorns
-  mat_ret  <- construeix_correlacio(freqs[[freq]], freq, "ret")
-  p_ret    <- plot_corr_gg(mat_ret,  paste0("Correlació log-retorns (", freq, ")"))
+  matriuret  <- matriucorrelacio(freqs[[freq]], freq, "ret")
+  plotsmatriuret    <- plotscorrelacio(matriuret,  paste0("Correlació log-retorns (", freq, ")"))
   
   # Correlació pèrdues
-  mat_perd <- construeix_correlacio(freqs[[freq]], freq, "perd")
-  p_perd   <- plot_corr_gg(mat_perd, paste0("Correlació log-pèrdues (", freq, ")"))
+  matriuperd <- matriucorrelacio(freqs[[freq]], freq, "perd")
+  plotsmatriuperd   <- plotscorrelacio(matriuperd, paste0("Correlació log-pèrdues (", freq, ")"))
   
-  pcomb <- grid.arrange(p_ret, p_perd, ncol = 2)
+  pcomb <- grid.arrange(plotsmatriuret, plotsmatriuperd, ncol = 2)
   ggsave(paste0("Correlacio_", freq, ".png"), plot = pcomb, width = 14, height = 7, dpi = 200)
-  
-  cat("\n=== Matriu correlació retorns -", freq, "===\n"); print(round(mat_ret, 4))
-  cat("\n=== Matriu correlació pèrdues -", freq, "===\n"); print(round(mat_perd, 4))
 }
-
-cat("\n\n=== ANÀLISI DESCRIPTIU COMPLET. Tots els gràfics guardats. ===\n")
