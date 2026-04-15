@@ -22,11 +22,19 @@ carrega <- function(fitxer, nom) {
   return(df)
 }
 
-BTC <- carrega("BTCUSD_1m_20170101_20260325.csv", "BTC")
-ETH <- carrega("ETHUSD_1m_20170101_20260325.csv", "ETH")
-BNB <- carrega("BNBUSD_1m_20170101_20260325.csv", "BNB")
-XRP <- carrega("XRPUSD_1m_20170101_20260325.csv", "XRP")
-SOL <- carrega("SOLUSD_1m_20170101_20260325.csv", "SOL")
+BTC <- carrega("BTCUSD_1m_20170101_20260401.csv", "BTC")
+ETH <- carrega("ETHUSD_1m_20170101_20260401.csv", "ETH")
+BNB <- carrega("BNBUSD_1m_20170101_20260401.csv", "BNB")
+XRP <- carrega("XRPUSD_1m_20170101_20260401.csv", "XRP")
+SOL <- carrega("SOLUSD_1m_20170101_20260401.csv", "SOL")
+
+datafinal <- as.POSIXct("2026-04-01 00:00:00", tz = "UTC")
+
+BTC <- BTC[data <= datafinal]
+ETH <- ETH[data <= datafinal]
+BNB <- BNB[data <= datafinal]
+XRP <- XRP[data <= datafinal]
+SOL <- SOL[data <= datafinal]
 
 noms <- c("BTC", "ETH", "BNB", "XRP", "SOL")
 
