@@ -1,25 +1,37 @@
 library(evir)
 library(ercv)
 library(ismev)
+library(extRemes)
+library(POT)
 
-dfperdues <- lapply(llista1h, function(df) df$perd)
+dfperdues1m <- lapply(llista1m, function(df) df$perd)
+dfperdues1h <- lapply(llista1h, function(df) df$perd)
+dfperdues1d <- lapply(llista1d, function(df) df$perd)
 
-# 1. Mean Excess Plot
-meplot(dfperdues$BTC[dfperdues$BTC>0])
+perduesBTC1m<-dfperdues1m$BTC[dfperdues1m$BTC>0]
+perduesBTC1h<-dfperdues1h$BTC[dfperdues1h$BTC>0]
+perduesBTC1d<-dfperdues1d$BTC[dfperdues1d$BTC>0]
 
-# fins a 0.05 la corba és suau però lleugerament corbada
-# a partir de 0.05 és relativament lineal
+# 1m
+meplot(perduesBTC1m)
+hill(perduesBTC1m)
+mrlplot(perduesBTC1m)
+tcplot(perduesBTC1m)
+cvplot(perduesBTC1m)
 
-length(dfperdues$BTC[dfperdues$BTC>0])
+# 1h
+meplot(perduesBTC1h)
+hill(perduesBTC1h)
+mrlplot(perduesBTC1h)
+tcplot(perduesBTC1h)
+cvplot(perduesBTC1h)
 
-length(dfperdues$BTC[dfperdues$BTC>0.04])
+# 1d
+meplot(perduesBTC1d)
+hill(perduesBTC1d)
+mrlplot(perduesBTC1d)
+tcplot(perduesBTC1d)
+cvplot(perduesBTC1d)
 
-length(dfperdues$BTC[dfperdues$BTC>0.045])
 
-length(dfperdues$BTC[dfperdues$BTC>0.05])
-
-
-# ETH
-
-meplot(dfperdues$ETH[dfperdues$ETH>0])
 
