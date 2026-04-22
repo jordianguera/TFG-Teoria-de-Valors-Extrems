@@ -6,6 +6,7 @@ library(FinTS)
 library(xtable)
 library(gridExtra)
 library(zoo)
+library(scales)
 
 # 1. Càrrega de dades
 
@@ -121,7 +122,7 @@ temps <- list("1min" = "data", "1hora" = "hora", "1dia" = "dia")
 
 plotpreu <- function(df, nom, freq, col){
   ggplot(df, aes(x = .data[[col]], y = tanca)) +
-    geom_line(color = "steelblue", linewidth = 0.4) +
+    geom_line(color = "cyan2", linewidth = 0.4) +
     labs(
       title = paste0("Sèrie temporal del preu: ", nom, " (", freq, ")"),
       x = "Data", y = "Preu (USD)"
@@ -184,20 +185,20 @@ for (freq in names(freqs)) {
       Q99 = round(Q99, 5)
     )
   
-  cat("\n\n Estadístics bàsics log-retorns -", freq, "\n")
+  cat("\n\n Estadístics bàsics logretorns -", freq, "\n")
   print(
     xtable(taula1,
-           caption = paste("Estadístics bàsics dels log-retorns -", freq),
+           caption = paste("Estadístics bàsics dels logretorns -", freq),
            label   = paste0("tab:basic_", freq)),
     include.rownames = FALSE,
     booktabs = TRUE,
     sanitize.text.function = identity
   )
   
-  cat("\n\n Quantils log-retorns -", freq, "\n")
+  cat("\n\n Quantils logretorns -", freq, "\n")
   print(
     xtable(taula2,
-           caption = paste("Quantils dels log-retorns -", freq),
+           caption = paste("Quantils dels logretorns -", freq),
            label   = paste0("tab:quant_", freq)),
     include.rownames = FALSE,
     booktabs = TRUE,
@@ -235,15 +236,17 @@ for (freq in names(freqs)) {
 
 # 6. Histogrames
 
+# 6.1 Histogrames en escala numèrica
+
 histretorns <- function(df, nom, freq) {
   ggplot(df, aes(x = ret)) +
     geom_histogram(aes(y = after_stat(density)), bins = 100,
-                   fill = "steelblue", alpha = 0.7, color = NA) +
+                   fill = "cyan2", alpha = 0.7, color = NA) +
     geom_density(color = "darkblue", linewidth = 0.8) +
     stat_function(fun = dnorm, args = list(mean = mean(df$ret), sd = sd(df$ret)),
                   color = "red", linetype = "dashed", linewidth = 0.8) +
-    labs(title = paste0("Log-retorns: ", nom, " (", freq, ")"),
-         x = "Log-retorn", y = "Densitat") +
+    labs(title = paste0("logretorns: ", nom, " (", freq, ")"),
+         x = "logretorn", y = "Densitat") +
     theme_minimal(base_size = 10)
 }
 
@@ -263,21 +266,155 @@ for (freq in names(freqs)) {
   # Histogrames retorns
   plotsr <- lapply(noms, function(n) histretorns(freqs[[freq]][[n]], n, freq))
   pcomb  <- do.call(grid.arrange, c(plotsr, ncol = 2,
-                                     top = paste0("Histogrames log-retorns - Freqüència ", freq)))
+                                    top = paste0("Histogrames logretorns - Freqüència ", freq)))
   ggsave(paste0("HistRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
   
   # Histogrames pèrdues
   plotsp <- lapply(noms, function(n) histperdues(freqs[[freq]][[n]], n, freq))
   pcomb2 <- do.call(grid.arrange, c(plotsp, ncol = 2,
-                                     top = paste0("Histogrames log-pèrdues - Freqüència ", freq)))
+                                    top = paste0("Histogrames log-pèrdues - Freqüència ", freq)))
   ggsave(paste0("HistPerd_", freq, ".png"), plot = pcomb2, width = 14, height = 16, dpi = 200)
 }
+
+# 6.2 Histogrames en escala log
+
+#pseudo ln pels negatius
+pln <- function(sigma) pseudo_log_trans(base = exp(1), sigma = sigma)
+
+
+# 6.2.1. Eix Y en escala ln
+
+histretornslny <- function(df, nom, freq) {
+  ggplot(df, aes(x = ret)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 100,
+                   fill = "blue2", alpha = 0.7, color = NA) +
+    geom_density(color = "darkblue", linewidth = 0.8) +
+    stat_function(fun = dnorm, args = list(mean = mean(df$ret), sd = sd(df$ret)),
+                  color = "red", linetype = "dashed", linewidth = 0.8) +
+    scale_y_continuous(trans = "log", labels = label_scientific()) +
+    annotation_logticks(sides = "l") +
+    labs(title = paste0(nom, " (", freq, ")"),
+         x = "logretorn", y = "Densitat (ln)") +
+    theme_minimal(base_size = 10)
+}
+
+
+# 6.2.2. Eix X en pseudo ln
+
+histretornslnx <- function(df, nom, freq) {
+  s <- sd(df$ret) * 0.1
+  # el 0.1 fa que la transició cap al comportament log sigui ràpida, és només un ajust heurístic.
+  
+  ggplot(df, aes(x = ret)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 100,
+                   fill = "cyan2", alpha = 0.7, color = NA) +
+    geom_density(color = "darkblue", linewidth = 0.8) +
+    stat_function(fun = dnorm, args = list(mean = mean(df$ret), sd = sd(df$ret)),
+                  color = "red", linetype = "dashed", linewidth = 0.8) +
+    scale_x_continuous(trans = pln(s),
+                       labels = label_number(accuracy = 0.001)) +
+    annotation_logticks(sides = "b") +
+    labs(title = paste0(nom, " (", freq, ")"),
+         x = "logretorn (pseudo-ln)", y = "Densitat") +
+    theme_minimal(base_size = 10)
+}
+
+# 6.2.3. Ambdós eixos en ln i pseudo ln
+
+histretornslnxy <- function(df, nom, freq) {
+  s <- sd(df$ret) * 0.1
+  ggplot(df, aes(x = ret)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 100,
+                   fill = "cyan2", alpha = 0.7, color = NA) +
+    geom_density(color = "darkblue", linewidth = 0.8) +
+    stat_function(fun = dnorm, args = list(mean = mean(df$ret), sd = sd(df$ret)),
+                  color = "red", linetype = "dashed", linewidth = 0.8) +
+    scale_y_continuous(trans = "log", labels = label_scientific()) +
+    scale_x_continuous(trans = pln(s),
+                       labels = label_number(accuracy = 0.001)) +
+    annotation_logticks(sides = "bl") +
+    labs(title = paste0(nom, " (", freq, ")"),
+         x = "logretorn (pseudo-ln)", y = "Densitat (ln)") +
+    theme_minimal(base_size = 10)
+}
+
+# 6.2.4. Logretorns en parells 2 a 2 i eixos en escala ln
+
+parellsdensitat <- function(llista, freq, coltemps) {
+  parells <- combn(noms, 2, simplify = FALSE)
+  meitat1 <- parells[1:5]
+  meitat2 <- parells[6:10]
+  
+  plots2a2 <- function(par) {
+    nom1 <- par[1]; nom2 <- par[2]
+    df1 <- llista[[nom1]][, .(t = get(coltemps), ret1 = ret)]
+    df2 <- llista[[nom2]][, .(t = get(coltemps), ret2 = ret)]
+    dfm <- merge(df1, df2, by = "t")
+    s1 <- sd(dfm$ret1) * 0.1
+    s2 <- sd(dfm$ret2) * 0.1
+    ggplot(dfm, aes(x = ret1, y = ret2)) +
+      geom_bin2d(bins = 100) +
+      scale_fill_viridis_c(
+        option = "inferno", name = "n",
+        trans  = "log",
+        labels = label_scientific()
+      ) +
+      scale_x_continuous(trans = pln(s1),
+                         labels = label_number(accuracy = 0.001)) +
+      scale_y_continuous(trans = pln(s2),
+                         labels = label_number(accuracy = 0.001)) +
+      labs(title = paste0(nom1, " vs ", nom2), x = nom1, y = nom2) +
+      theme_minimal(base_size = 9) +
+      theme(legend.key.size = unit(0.4, "cm"),
+            legend.title    = element_text(size = 7))
+  }
+  list(p1 = do.call(grid.arrange,
+                    c(lapply(meitat1, plots2a2), ncol = 3,
+                      top = paste0("Densitat retorns 2 a 2 (1/2) - ", freq))),
+       p2 = do.call(grid.arrange,
+                    c(lapply(meitat2, plots2a2), ncol = 3,
+                      top = paste0("Densitat retorns 2 a 2 (2/2) - ", freq)))
+  )
+}
+
+for (freq in names(freqs)) {
+  ct <- temps[[freq]]
+  # Y ln
+  plotlny <- lapply(noms, function(n) histretornslny(freqs[[freq]][[n]], n, freq))
+  ggsave(paste0("HistRetlnY_", freq, ".png"),
+         plot = do.call(grid.arrange, c(plotlny, ncol = 2,
+                                        top = paste0("Histogrames - Y ln - ", freq))),
+         width = 14, height = 16, dpi = 200)
+  
+  # X pseudo ln
+  plotlnx <- lapply(noms, function(n) histretornslnx(freqs[[freq]][[n]], n, freq))
+  ggsave(paste0("HistRetlnX_", freq, ".png"),
+         plot = do.call(grid.arrange, c(plotlnx, ncol = 2,
+                                        top = paste0("Histogrames - X pseudo-ln - ", freq))),
+         width = 14, height = 16, dpi = 200)
+  
+  # XY ln
+  plotlnxy <- lapply(noms, function(n) histretornslnxy(freqs[[freq]][[n]], n, freq))
+  ggsave(paste0("HistRetlnXY_", freq, ".png"),
+         plot = do.call(grid.arrange, c(plotlnxy, ncol = 2,
+                                        top = paste0("Histogrames - XY ln - ", freq))),
+         width = 14, height = 16, dpi = 200)
+
+  # parells densitat - 2 fitxers de 5 gràfics cadascun
+  pars <- parellsdensitat(freqs[[freq]], freq, ct)
+  ggsave(paste0("parellsdensitat1_", freq, ".png"),
+         plot = pars$p1, width = 18, height = 12, dpi = 200)
+  ggsave(paste0("parellsdensitat2_", freq, ".png"),
+         plot = pars$p2, width = 18, height = 12, dpi = 200)
+
+}
+
 
 # 7. QQ-plot vs Normal
 
 qqplot <- function(df, nom, freq, var, etiq) {
   ggplot(df, aes(sample = .data[[var]])) +
-    stat_qq(color = "steelblue", alpha = 0.4, size = 0.5) +
+    stat_qq(color = "cyan2", alpha = 0.4, size = 0.5) +
     stat_qq_line(color = "red", linewidth = 0.9) +
     labs(title = paste0("QQ-plot ", etiq, ": ", nom, " (", freq, ")"),
          x = "Quantils teòrics (Normal)", y = "Quantils empírics") +
@@ -286,9 +423,9 @@ qqplot <- function(df, nom, freq, var, etiq) {
 
 for (freq in names(freqs)) {
   # QQ retorns
-  plotsr <- lapply(noms, function(n) qqplot(freqs[[freq]][[n]], n, freq, "ret", "log-retorns"))
+  plotsr <- lapply(noms, function(n) qqplot(freqs[[freq]][[n]], n, freq, "ret", "logretorns"))
   pcomb <- do.call(grid.arrange, c(plotsr, ncol = 2,
-                                     top = paste0("QQ-plots log-retorns - Freqüència ", freq)))
+                                     top = paste0("QQ-plots logretorns - Freqüència ", freq)))
   ggsave(paste0("QQRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
   
   # QQ pèrdues
@@ -310,7 +447,7 @@ plotsacf <- function(df, nom, freq, var, etiq, max_lag = 40) {
   )
   ggplot(taulaacf, aes(x = retard, y = acf)) +
     geom_hline(yintercept = 0, color = "black") +
-    geom_segment(aes(xend = retard, yend = 0), color = "steelblue") +
+    geom_segment(aes(xend = retard, yend = 0), color = "cyan2") +
     geom_hline(yintercept = c(-ic, ic), linetype = "dashed", color = "red") +
     labs(title = paste0("ACF ", etiq, ": ", nom, " (", freq, ")"),
          x = "Retard", y = "ACF") +
@@ -321,9 +458,9 @@ for (freq in names(freqs)) {
   lagmax <- if (freq == "1min") 60 else if (freq == "1hora") 48 else 30
   
   plotsr <- lapply(noms, function(n)
-    plotsacf(freqs[[freq]][[n]], n, freq, "ret", "log-retorns", lagmax))
+    plotsacf(freqs[[freq]][[n]], n, freq, "ret", "logretorns", lagmax))
   pcomb <- do.call(grid.arrange, c(plotsr, ncol = 2,
-                                     top = paste0("ACF log-retorns - Freqüència ", freq)))
+                                     top = paste0("ACF logretorns - Freqüència ", freq)))
   ggsave(paste0("ACFRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
 }
 
@@ -335,8 +472,8 @@ plotsvolcluster <- function(df, nom, freq, col) {
   ct  <- temps[[freq]]
   ggplot(df2, aes(x = .data[[ct]], y = absret)) +
     geom_line(color = "darkorange", linewidth = 0.3, alpha = 0.8) +
-    labs(title = paste0("|Log-retorns|: ", nom, " (", freq, ")"),
-         x = "Data", y = "|Log-retorn|") +
+    labs(title = paste0("|logretorns|: ", nom, " (", freq, ")"),
+         x = "Data", y = "|logretorn|") +
     theme_minimal(base_size = 10)
 }
 
@@ -358,10 +495,10 @@ for (freq in names(freqs)) {
   plotsretornabs <- lapply(noms, function(n) {
     df2 <- copy(freqs[[freq]][[n]])
     df2[, absret := abs(ret)]
-    plotsacf(df2, n, freq, "absret", "|log-retorns|", lagmax)
+    plotsacf(df2, n, freq, "absret", "|logretorns|", lagmax)
   })
   pcomb <- do.call(grid.arrange, c(plotsretornabs, ncol = 2,
-                                    top = paste0("ACF |log-retorns| - Freqüència ", freq)))
+                                    top = paste0("ACF |logretorns| - Freqüència ", freq)))
   ggsave(paste0("ACFAbsRet_", freq, ".png"), plot = pcomb, width = 14, height = 16, dpi = 200)
   
   # ACF pèrdues
@@ -393,7 +530,7 @@ plotscorrelacio <- function(mat, titol) {
   ggplot(df_melt, aes(x = X, y = Y, fill = Corr)) +
     geom_tile(color = "white") +
     geom_text(aes(label = round(Corr, 2)), size = 4, fontface = "bold") +
-    scale_fill_gradient2(low = "steelblue", mid = "white", high = "darkred",
+    scale_fill_gradient2(low = "cyan2", mid = "white", high = "darkred",
                          midpoint = 0, limits = c(-1, 1)) +
     labs(title = titol, x = "", y = "", fill = "Correlació") +
     theme_minimal(base_size = 11) +
@@ -403,7 +540,7 @@ plotscorrelacio <- function(mat, titol) {
 for (freq in names(freqs)) {
   # Correlació retorns
   matriuret  <- matriucorrelacio(freqs[[freq]], freq, "ret")
-  plotsmatriuret    <- plotscorrelacio(matriuret,  paste0("Correlació log-retorns (", freq, ")"))
+  plotsmatriuret    <- plotscorrelacio(matriuret,  paste0("Correlació logretorns (", freq, ")"))
   
   # Correlació pèrdues
   matriuperd <- matriucorrelacio(freqs[[freq]], freq, "perd")
