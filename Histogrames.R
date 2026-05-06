@@ -19,12 +19,30 @@ hlog <- function(ret, nom, freq, logstr = "") {
   hn <- hist(abs(ret[ret < 0]), breaks = 600, plot = FALSE)
   dp <- hp$density > 0
   dn <- hn$density > 0
-  plot(hp$mids[dp], hp$density[dp], type = "h", log = logstr,
-       col = "steelblue", lwd = 1.5,
+  
+  # Positius
+  plot(hp$mids[dp], hp$density[dp], type = "p", log = logstr,
+       col = "steelblue", pch = 16, cex = 0.5,
        main = paste0(nom, " + (", freq, ")"), xlab = "ret > 0", ylab = "Densitat")
-  plot(hn$mids[dn], hn$density[dn], type = "h", log = logstr,
-       col = "tomato", lwd = 1.5,
+  d_pos <- density(ret[ret > 0], n = 1024)
+  if (logstr %in% c("", "x")) {
+    lines(d_pos, col = "navy", lwd = 1.5)
+  } else {
+    ok <- d_pos$y > 0
+    lines(d_pos$x[ok], d_pos$y[ok], col = "navy", lwd = 1.5)
+  }
+  
+  # Negatius
+  plot(hn$mids[dn], hn$density[dn], type = "p", log = logstr,
+       col = "tomato", pch = 16, cex = 0.5,
        main = paste0(nom, " - (", freq, ")"), xlab = "|ret < 0|", ylab = "Densitat")
+  d_neg <- density(abs(ret[ret < 0]), n = 1024)
+  if (logstr %in% c("", "x")) {
+    lines(d_neg, col = "firebrick", lwd = 1.5)
+  } else {
+    ok <- d_neg$y > 0
+    lines(d_neg$x[ok], d_neg$y[ok], col = "firebrick", lwd = 1.5)
+  }
 }
 
 for (freq in names(freqs)) {
@@ -39,44 +57,91 @@ for (freq in names(freqs)) {
 
 # 6.2.4 Parells 2 a 2
 
-plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins=300, freq="") {
-  n <- min(length(r1), length(r2))
+plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq = "") {
+  n  <- min(length(r1), length(r2))
   r1 <- r1[1:n]; r2 <- r2[1:n]
   
   casos <- list(
-    list(r1[r1>0 & r2>0],  r2[r1>0 & r2>0],  paste0(nom1,"+"), paste0(nom2,"+")),
-    list(-r1[r1<0 & r2>0], r2[r1<0 & r2>0],  paste0(nom1,"-"), paste0(nom2,"+")),
-    list(r1[r1>0 & r2<0],  -r2[r1>0 & r2<0], paste0(nom1,"+"), paste0(nom2,"-")),
-    list(-r1[r1<0 & r2<0], -r2[r1<0 & r2<0], paste0(nom1,"-"), paste0(nom2,"-"))
+    list(-r1[r1<0 & r2>0],  r2[r1<0 & r2>0],  paste0(nom1,"-"), paste0(nom2,"+"), TRUE,  FALSE), # TL
+    list( r1[r1>0 & r2>0],  r2[r1>0 & r2>0],  paste0(nom1,"+"), paste0(nom2,"+"), FALSE, FALSE), # TR
+    list(-r1[r1<0 & r2<0], -r2[r1<0 & r2<0],  paste0(nom1,"-"), paste0(nom2,"-"), TRUE,  TRUE),  # BL
+    list( r1[r1>0 & r2<0], -r2[r1>0 & r2<0],  paste0(nom1,"+"), paste0(nom2,"-"), FALSE, TRUE)   # BR
   )
   
-  png(paste0(fitxer, "_log.png"), width = 1400, height = 1400, res = 150)
-  par(mfrow = c(2,2), mar = c(4,4,3,1))
-  for (cas in casos) {
+  mats  <- vector("list", 4)
+  bxs   <- vector("list", 4)
+  bys   <- vector("list", 4)
+  valid <- logical(4)
+  
+  for (i in seq_along(casos)) {
+    cas <- casos[[i]]
     x <- cas[[1]]; y <- cas[[2]]
-    x <- x[is.finite(x) & x > 0]; y <- y[is.finite(y) & y > 0]
-    if (length(x) < 2 || length(y) < 2) { plot.new(); next }
+    x <- x[is.finite(x) & x > 0]
+    y <- y[is.finite(y) & y > 0]
+    if (length(x) < 2 || length(y) < 2) next
+    valid[i] <- TRUE
     
-    bx <- exp(seq(log(min(x)), log(max(x)), length.out = (nbins+1)))
-    by <- exp(seq(log(min(y)), log(max(y)), length.out = (nbins+1)))
+    bx <- exp(seq(log(min(x)), log(max(x)), length.out = nbins + 1))
+    by <- exp(seq(log(min(y)), log(max(y)), length.out = nbins + 1))
     m  <- matrix(0L, nbins, nbins)
     xi <- pmax(1, pmin(nbins, findInterval(x, bx, rightmost.closed = TRUE)))
     yi <- pmax(1, pmin(nbins, findInterval(y, by, rightmost.closed = TRUE)))
-    for (i in seq_along(xi)) m[xi[i], yi[i]] <- m[xi[i], yi[i]] + 1L
+    for (j in seq_along(xi)) m[xi[j], yi[j]] <- m[xi[j], yi[j]] + 1L
     
-    # eixos en log
-    atx <- pretty(log(bx)); aty <- pretty(log(by))
-    image(log(bx), log(by), log1p(m),
-          col  = hcl.colors(nbins, "YlOrRd", rev = TRUE),
-          main = paste0(cas[[3]], " vs ", cas[[4]], " ", freq),
+    mats[[i]] <- m; bxs[[i]] <- bx; bys[[i]] <- by
+  }
+  
+  zlim <- range(unlist(lapply(mats[valid], log1p)), na.rm = TRUE)
+  cols <- hcl.colors(256, "YlOrRd", rev = TRUE)
+  
+  png(paste0(fitxer, "_log.png"), width = 1650, height = 1400, res = 150)
+  layout(
+    matrix(c(1, 2, 5,
+             3, 4, 5), nrow = 2, ncol = 3, byrow = TRUE),
+    widths = c(1, 1, 0.12)
+  )
+  
+  for (i in seq_along(casos)) {
+    par(mar = c(4, 4, 3, 1))
+    cas <- casos[[i]]
+    
+    if (!valid[i]) { plot.new(); next }
+    
+    bx   <- bxs[[i]]; by <- bys[[i]]; m <- mats[[i]]
+    xinv <- cas[[5]];  yinv <- cas[[6]]
+    
+    lbx <- log(bx); lby <- log(by)
+    xlim_use <- if (xinv) rev(range(lbx)) else range(lbx)
+    ylim_use <- if (yinv) rev(range(lby)) else range(lby)
+    
+    atx <- pretty(lbx); aty <- pretty(lby)
+    
+    image(lbx, lby, log1p(m),
+          col  = cols,
+          zlim = zlim,
+          xlim = xlim_use,
+          ylim = ylim_use,
+          main = paste0(cas[[3]], " vs ", cas[[4]], if (nchar(freq)) paste0("  [", freq, "]")),
           xlab = cas[[3]], ylab = cas[[4]],
           axes = FALSE)
-    axis(1, at = atx, labels = round(exp(atx), 4))
-    axis(2, at = aty, labels = round(exp(aty), 4))
+    axis(1, at = atx, labels = formatC(exp(atx), format = "e", digits = 1))
+    axis(2, at = aty, labels = formatC(exp(aty), format = "e", digits = 1))
     box()
   }
+  
+  par(mar = c(4, 0.5, 3, 3.5))
+  cb_y <- seq(zlim[1], zlim[2], length.out = 256)
+  image(x = 1, y = cb_y,
+        z = matrix(cb_y, nrow = 1),
+        col = cols, axes = FALSE, xlab = "", ylab = "")
+  axis(4, las = 1, cex.axis = 0.75)
+  mtext("log(1+n)", side = 4, line = 2.8, cex = 0.8)
+  box()
+  
   dev.off()
 }
+
+
 plotparlin <- function(r1, r2, nom1, nom2, nbins=300, freq="") {
   n <- min(length(r1), length(r2))
   r1 <- r1[1:n]; r2 <- r2[1:n]
