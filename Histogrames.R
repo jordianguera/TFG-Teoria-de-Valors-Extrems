@@ -14,35 +14,35 @@ library(POT)
 
 # 6.2 Histogrames pos/neg
 
-hlog <- function(ret, nom, freq, logstr = "") {
-  hp <- hist(ret[ret > 0],      breaks = 600, plot = FALSE)
-  hn <- hist(abs(ret[ret < 0]), breaks = 600, plot = FALSE)
-  dp <- hp$density > 0
-  dn <- hn$density > 0
+hlog <- function(ret, nom, freq, barres = 50, logstr = "") {
+  logx <- grepl("x", logstr)
+  logy <- grepl("y", logstr)
   
-  # Positius
-  plot(hp$mids[dp], hp$density[dp], type = "p", log = logstr,
-       col = "steelblue", pch = 16, cex = 0.5,
-       main = paste0(nom, " + (", freq, ")"), xlab = "ret > 0", ylab = "Densitat")
-  d_pos <- density(ret[ret > 0], n = 1024)
-  if (logstr %in% c("", "x")) {
-    lines(d_pos, col = "navy", lwd = 1.5)
-  } else {
-    ok <- d_pos$y > 0
-    lines(d_pos$x[ok], d_pos$y[ok], col = "navy", lwd = 1.5)
+  mkbreaks <- function(x) {
+    if (logx) exp(seq(log(min(x)), log(max(x)), length.out = barres + 1))
+    else       barres
   }
   
-  # Negatius
-  plot(hn$mids[dn], hn$density[dn], type = "p", log = logstr,
-       col = "tomato", pch = 16, cex = 0.5,
-       main = paste0(nom, " - (", freq, ")"), xlab = "|ret < 0|", ylab = "Densitat")
-  d_neg <- density(abs(ret[ret < 0]), n = 1024)
-  if (logstr %in% c("", "x")) {
-    lines(d_neg, col = "firebrick", lwd = 1.5)
-  } else {
-    ok <- d_neg$y > 0
-    lines(d_neg$x[ok], d_neg$y[ok], col = "firebrick", lwd = 1.5)
+  grafich <- function(h, colorbarra, main, xlab) {
+    xl <- h$breaks[-length(h$breaks)]
+    xr <- h$breaks[-1]
+    d  <- h$density
+    ok <- d > 0
+    ybot <- if (logy) min(d[ok]) * 0.5 else 0
+    ylim <- c(ybot, max(d[ok]) * if (logy) 2 else 1.05)
+    plot(NA, xlim = range(h$breaks), ylim = ylim, log = logstr,
+         main = main, xlab = xlab, ylab = "Densitat")
+    rect(xl[ok], ybot, xr[ok], d[ok],
+         col = adjustcolor(colorbarra, alpha.f = 0.7), border = NA)
   }
+  
+  pos <- ret[ret > 0]
+  grafich(hist(pos, breaks = mkbreaks(pos), plot = FALSE),
+            "steelblue", paste0(nom, " + (", freq, ")"), "ret > 0")
+  
+  neg <- abs(ret[ret < 0])
+  grafich(hist(neg, breaks = mkbreaks(neg), plot = FALSE),
+            "tomato", paste0(nom, " - (", freq, ")"), "|ret < 0|")
 }
 
 for (freq in names(freqs)) {
@@ -111,16 +111,16 @@ plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq
     xinv <- cas[[5]];  yinv <- cas[[6]]
     
     lbx <- log(bx); lby <- log(by)
-    xlim_use <- if (xinv) rev(range(lbx)) else range(lbx)
-    ylim_use <- if (yinv) rev(range(lby)) else range(lby)
+    xlimit <- if (xinv) rev(range(lbx)) else range(lbx)
+    ylimit <- if (yinv) rev(range(lby)) else range(lby)
     
     atx <- pretty(lbx); aty <- pretty(lby)
     
     image(lbx, lby, log1p(m),
           col  = cols,
           zlim = zlim,
-          xlim = xlim_use,
-          ylim = ylim_use,
+          xlim = xlimit,
+          ylim = ylimit,
           main = paste0(cas[[3]], " vs ", cas[[4]], if (nchar(freq)) paste0("  [", freq, "]")),
           xlab = cas[[3]], ylab = cas[[4]],
           axes = FALSE)
@@ -130,9 +130,9 @@ plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq
   }
   
   par(mar = c(4, 0.5, 3, 3.5))
-  cb_y <- seq(zlim[1], zlim[2], length.out = 256)
-  image(x = 1, y = cb_y,
-        z = matrix(cb_y, nrow = 1),
+  cby <- seq(zlim[1], zlim[2], length.out = 256)
+  image(x = 1, y = cby,
+        z = matrix(cby, nrow = 1),
         col = cols, axes = FALSE, xlab = "", ylab = "")
   axis(4, las = 1, cex.axis = 0.75)
   mtext("log(1+n)", side = 4, line = 2.8, cex = 0.8)
