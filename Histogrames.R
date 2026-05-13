@@ -53,7 +53,57 @@ for (freq in names(freqs)) {
     dev.off()
   }
 }
+# Funció de supervivència empírica - panels agrupats per freqüència i escala
 
+ecdf_survival <- function(x) {
+  xs <- sort(x)
+  n  <- length(xs)
+  list(x = xs, y = 1 - seq_len(n) / n)
+}
+
+configs <- list(
+  list(logstr = "",   tag = "lin"),
+  list(logstr = "y",  tag = "lnY"),
+  list(logstr = "x",  tag = "lnX"),
+  list(logstr = "xy", tag = "lnXY")
+)
+
+for (freq in names(freqs)) {
+  for (cfg in configs) {
+    
+    png(paste0("Survival_", cfg$tag, "_", freq, ".png"),
+        width = 2000, height = 3000, res = 200)
+    
+    par(mfrow = c(5, 2), mar = c(4, 4, 3, 1))
+    
+    for (n in noms) {
+      ret <- freqs[[freq]][[n]]$ret
+      
+      sp <- ecdf_survival(ret[ret > 0])
+      sn <- ecdf_survival(abs(ret[ret < 0]))
+      
+      plot(sp$x, sp$y,
+           type = "l", lwd = 1.5,
+           col  = "steelblue",
+           log  = cfg$logstr,
+           main = paste0(n, " + (", freq, ")"),
+           xlab = "r > 0",
+           ylab = "S(x)",
+           panel.first = grid(col = "grey85", lty = 1))
+      
+      plot(sn$x, sn$y,
+           type = "l", lwd = 1.5,
+           col  = "tomato",
+           log  = cfg$logstr,
+           main = paste0(n, " - (", freq, ")"),
+           xlab = "|r < 0|",
+           ylab = "S(x)",
+           panel.first = grid(col = "grey85", lty = 1))
+    }
+    
+    dev.off()
+  }
+}
 
 # 6.2.4 Parells 2 a 2
 
