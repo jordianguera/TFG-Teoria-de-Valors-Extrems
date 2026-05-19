@@ -1,16 +1,42 @@
-library(evir); library(ercv); library(ismev)
-library(POT);  library(MASS); library(fitdistrplus)
+library(evir)
+library(ercv)
+library(ismev)
+library(POT)
+library(MASS)
+library(fitdistrplus)
+
+alineat <- Reduce(
+  function(a, b) merge(a, b, by = "data"),
+  lapply(c("BTC", alts), function(cr) {
+    setNames(llista1m[[cr]][, c("data", "perd")], c("data", paste0("perd", cr)))
+  })
+)
+uBTC  <- 0.001308866
+idx   <- which(alineat$perdBTC > uBTC)
+nivells <- c(0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999)
+
+taula <- data.frame(nivell = nivells)
+
+for (a in alts) {
+  perdCond <- alineat[[paste0("perd", a)]][idx]
+  perdCond <- perdCond[perdCond > 0]
+  fit      <- fitpot(perdCond, threshold = quantile(perdCond, 0.90))
+  taula[[a]] <- sapply(nivells, function(q)
+    qpot(1 - q, pars = fit$coeff, lower.tail = FALSE))
+}
+
+print(round(taula, 6))
 
 criptos <- c("BTC", "BNB", "ETH", "SOL", "XRP")
 alts    <- c("ETH", "BNB", "XRP", "SOL")
 
 
-ajusta_gpd <- function(perdues, nivells = NULL) {
+ajustagpd <- function(perdues, nivells = NULL, u = NULL) {
   perdues <- perdues[perdues > 0]
   set.seed(1714)
-  u   <- thrselect(perdues)$solution$threshold
+  if (is.null(u)) u <- thrselect(perdues)$solution$threshold
   fit <- fitpot(perdues, threshold = u)
-  res <- list(u = u, fit = fit, pct_exc = 100 * mean(perdues > u))
+  res <- list(u = u, fit = fit, pctexc = 100 * mean(perdues > u))
   if (!is.null(nivells))
     res$VaR <- setNames(
       sapply(nivells, function(q) qpot(1 - q, pars = fit$coeff, lower.tail = FALSE)),
@@ -23,13 +49,16 @@ ajusta_gpd <- function(perdues, nivells = NULL) {
 
 resultats1m <- list()
 
+uBTCfix <- 0.001308866
+
 for (cripto in criptos) {
   cat(cripto, "1m\n")
   
-  gpd <- ajusta_gpd(dfperdues1m[[cripto]], nivells = c(0.98, 0.99, 0.999))
+  gpd <- ajustagpd(dfperdues1m[[cripto]], nivells = c(0.98, 0.99, 0.999),
+                    u = if (cripto == "BTC") uBTCfix else NULL)
   
   cat("Threshold:", round(gpd$u, 6), "\n")
-  cat("Excedències:", round(gpd$pct_exc, 3), "%\n")
+  cat("Excedències:", round(gpd$pctexc, 3), "%\n")
   print(gpd$fit)
   for (nm in names(gpd$VaR)) cat(nm, "=", round(gpd$VaR[[nm]], 6), "\n")
   
@@ -61,7 +90,7 @@ dev.off()
 nuBTC1m <- 1 / xiBTC1m
 cat("\nEVI BTC:", round(xiBTC1m, 4), "  nu forçat:", round(nuBTC1m, 4), "\n")
 
-nll_t <- function(params, x, nu = NULL) {
+nllt <- function(params, x, nu = NULL) {
   mu    <- params[1]
   sigma <- params[2]
   if (sigma <= 0) return(Inf)
@@ -70,7 +99,7 @@ nll_t <- function(params, x, nu = NULL) {
 }
 
 optLliure <- optim(c(median(perduesBTC1m), mad(perduesBTC1m), 5),
-                   nll_t, x = perduesBTC1m,
+                   nllt, x = perduesBTC1m,
                    method = "L-BFGS-B", lower = c(-Inf, 1e-8, 2.01))
 muMle <- optLliure$par[1]
 sigmaMle <- optLliure$par[2]
@@ -79,7 +108,7 @@ cat("\nt lliure mu:", round(muMle, 6), " sigma:", round(sigmaMle, 6),
     " nu:", round(nuMle, 6), "\n")
 
 optForcat <- optim(c(median(perduesBTC1m), mad(perduesBTC1m)),
-                   nll_t, x = perduesBTC1m, nu = nuBTC1m,
+                   nllt, x = perduesBTC1m, nu = nuBTC1m,
                    method = "L-BFGS-B", lower = c(-Inf, 1e-8))
 muT    <- optForcat$par[1]
 sigmaT <- optForcat$par[2]
@@ -111,10 +140,10 @@ alineat <- Reduce(
   })
 )
 
-perdBTC <- alineat$perd_BTC
+perdBTC <- alineat$perdBTC
 
 varMarg <- sapply(alts, function(a) {
-  ajusta_gpd(alineat[[paste0("perd_", a)]], nivells = 0.99)$VaR[["VaR 99%"]]
+  ajustagpd(alineat[[paste0("perd", a)]], nivells = 0.99)$VaR[["VaR 99%"]]
 })
 cat("\nVaR marginals 99%:\n"); print(round(varMarg, 6))
 
@@ -132,20 +161,20 @@ for (qBTC in nivellsBTC) {
   fila <- data.frame(qBTC = qBTC, varBTC = uBTC, nCond = length(idx))
   
   for (a in alts) {
-    perdCond <- alineat[[paste0("perd_", a)]][idx]
+    perdCond <- alineat[[paste0("perd", a)]][idx]
     perdCond <- perdCond[perdCond > 0]
     
-    if (length(perdCond) < 100) { fila[[paste0("CoVaR_", a)]] <- NA; next }
+    if (length(perdCond) < 100) { fila[[paste0("CoVaR", a)]] <- NA; next }
     
-    gpdC <- ajusta_gpd(perdCond, nivells = 0.99)
+    gpdC <- ajustagpd(perdCond, nivells = 0.99)
     cat("  ", a, " threshold:", round(gpdC$u, 6),
-        " excedències:", round(gpdC$pct_exc, 2), "%",
+        " excedències:", round(gpdC$pctexc, 2), "%",
         " CoVaR 99%:", round(gpdC$VaR[["VaR 99%"]], 6),
         " delta CoVaR:", round(gpdC$VaR[["VaR 99%"]] - varMarg[[a]], 6), "\n")
     print(gpdC$fit)
     
-    fila[[paste0("CoVaR_", a)]] <- gpdC$VaR[["VaR 99%"]]
-    fila[[paste0("deltaCoVaR_", a)]] <- gpdC$VaR[["VaR 99%"]] - varMarg[[a]]
+    fila[[paste0("CoVaR", a)]] <- gpdC$VaR[["VaR 99%"]]
+    fila[[paste0("deltaCoVaR", a)]] <- gpdC$VaR[["VaR 99%"]] - varMarg[[a]]
   }
   
   covarResultats[[as.character(qBTC)]] <- fila
@@ -157,7 +186,7 @@ print(taulaCovar)
 write.csv(taulaCovar, "CoVaR_multi_crypto.csv", row.names = FALSE)
 
 png("CoVaR_ETH_BTC.png", width = 1000, height = 700)
-plot(taulaCovar$qBTC, taulaCovar$CoVaR_ETH,
+plot(taulaCovar$qBTC, taulaCovar$CoVaRETH,
      type = "b", pch = 16, lwd = 2,
      xlab = "Quantil BTC", ylab = "CoVaR ETH 99%",
      main = "CoVaR ETH condicionat a BTC extrem")
