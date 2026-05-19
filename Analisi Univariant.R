@@ -8,6 +8,11 @@ dfperdues1h <- lapply(llista1h, function(df) df$perd)
 dfperdues1d <- lapply(llista1d, function(df) df$perd)
 
 perduesBTC1m<-dfperdues1m$BTC[dfperdues1m$BTC>0]
+perduesETH1m<-dfperdues1m$ETH[dfperdues1m$ETH>0]
+perduesBNB1m<-dfperdues1m$BNB[dfperdues1m$BNB>0]
+perduesXRP1m<-dfperdues1m$XRP[dfperdues1m$XRP>0]
+perduesSOL1m<-dfperdues1m$SOL[dfperdues1m$SOL>0]
+
 perduesBTC1h<-dfperdues1h$BTC[dfperdues1h$BTC>0]
 perduesBTC1d<-dfperdues1d$BTC[dfperdues1d$BTC>0]
 
@@ -119,7 +124,7 @@ for (cripto in criptos) {
 
 
 
-
+set.seed(1714)
 for (cripto in criptos) {
   cat(cripto, "1m\n")
   
@@ -127,7 +132,7 @@ for (cripto in criptos) {
   perdues <- perdues[perdues > 0]
   
   # Seleccio de threshold
-  set.seed(1714)
+
   tsel <- thrselect(perdues)
   u <- tsel$solution$threshold
   p <- perdues[perdues > u]
@@ -164,7 +169,6 @@ mostresincloses <- c(BTC = length(dfperdues1m$BTC[dfperdues1m$BTC>0])-mostresexc
                      XRP = length(dfperdues1m$XRP[dfperdues1m$XRP>0])-mostresexcloses["XRP"],
                      SOL = length(dfperdues1m$SOL[dfperdues1m$SOL>0])-mostresexcloses["SOL"])
 
-thrselect(dfperdues1m$BTC[dfperdues1m$BTC>0], evi = 0.2822)
 
 tdataBTC<-tdata(dfperdues1m$BTC[dfperdues1m$BTC>0])
 tdataETH<-tdata(dfperdues1m$ETH[dfperdues1m$ETH>0])
@@ -209,3 +213,63 @@ for (cripto in criptos) {
   cat("\n EVI:", round(evi, 4),
       " i Threshold:", round(tsel$solution$threshold, 6), "\n")
 }
+
+
+set.seed(1714)
+tdBTCthr<-thrselect(tdataBTC,m=30,nsim=200)
+cievi(tdBTCthr$solution$nextremes, tdBTCthr$solution$evi)
+#evi 0.2922817 
+tdETHthr<-thrselect(tdataETH,m=30,nsim=200)
+cievi(tdETHthr$solution$nextremes, tdETHthr$solution$evi)
+#evi 0.2451789 
+tdBNBthr<-thrselect(tdataBNB,m=30,nsim=200)
+cievi(tdBNBthr$solution$nextremes, tdBNBthr$solution$evi)
+#evi 0.2202733
+tdXRPthr<-thrselect(tdataXRP,m=30,nsim=200)
+cievi(tdXRPthr$solution$nextremes, tdXRPthr$solution$evi)
+#evi 0.02120167
+tdSOLthr<-thrselect(tdataSOL,m=30,nsim=200)
+cievi(tdSOLthr$solution$nextremes, tdSOLthr$solution$evi)
+#evi 0.130553
+
+#tots els cievi mostren que evi=0.5 es pot rebutjar
+
+fitBTC1m <- fitpot(perduesBTC1m, evi = 0.2922817)
+
+ccdfplot(perduesBTC1m,pars=fitBTC1m,log="xy",main="(loglog)")
+
+fitBTC<-fitpot(tdataBTC, nextremes = length(tdataBTC)*0.1)
+fitETH<-fitpot(tdataETH, nextremes = round(length(tdataETH)*0.1,0))
+fitBNB<-fitpot(tdataBNB, nextremes = round(length(tdataBNB)*0.1,0))
+fitXRP<-fitpot(tdataXRP, nextremes = round(length(tdataXRP)*0.1,0))
+fitSOL<-fitpot(tdataSOL, nextremes = round(length(tdataSOL)*0.1,0))
+
+thrselect(tdataBTC, nextremes = length(tdataBTC)*0.1)
+thrselect(tdataETH, nextremes = round(length(tdataETH)*0.1,0))
+thrselect(tdataBNB, nextremes = round(length(tdataBNB)*0.1,0))
+thrselect(tdataXRP, nextremes = round(length(tdataXRP)*0.1,0))
+thrselect(tdataSOL, nextremes = round(length(tdataSOL)*0.1,0))
+
+BTCthr<-thrselect(tdataBTC, evi = fitBTC$coeff[["evi"]],m=30,nsim=100)
+ETHthr<-thrselect(tdataETH, evi = fitETH$coeff[["evi"]],m=30,nsim=100)
+BNBthr<-thrselect(tdataBNB, evi = fitBNB$coeff[["evi"]],m=30,nsim=100)
+XRPthr<-thrselect(tdataXRP, evi = fitXRP$coeff[["evi"]],m=30,nsim=100)
+SOLthr<-thrselect(tdataSOL, evi = fitSOL$coeff[["evi"]],m=30,nsim=100)
+
+
+
+fitBTC2<-fitpot(perduesBTC1m, threshold = BTCthr$solution$threshold)
+fitETH2<-fitpot(perduesETH1m, threshold = ETHthr$solution$threshold)
+fitBNB2<-fitpot(perduesBNB1m, threshold = BNBthr$solution$threshold)
+fitXRP2<-fitpot(perduesXRP1m, threshold = XRPthr$solution$threshold)
+fitSOL2<-fitpot(perduesSOL1m, threshold = SOLthr$solution$threshold)
+
+fitpot(perduesBTC1m, threshold = BTCthr$solution$threshold)
+
+ccdfplot(tdataBTC,pars=fitBTC,log="xy",main="tdata (loglog)")
+ccdfplot(perduesBTC1m,pars=fitBTC,log="xy",main="btc (loglog)")
+
+llindars<-c(BTCthr, ETHthr, BNBNthr, XRPthr, SOLthr)
+
+fitpot(tdataETH, nextremes = 130)
+fitpot(tdataBTC, nextremes = 131)
