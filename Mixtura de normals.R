@@ -2,7 +2,33 @@ library(mclust)
 library(data.table)
 library(mvtnorm)
 
-plotparlogquadrants <- function(r1, r2, nom1, nom2, fits_q,
+
+basetemps <- Reduce(function(x, y) merge(x, y, by = "data", all = FALSE),
+                    list(BTC[, .(data)],
+                         ETH[, .(data)],
+                         BNB[, .(data)],
+                         XRP[, .(data)],
+                         SOL[, .(data)]))
+
+alinear <- function(df, base) {
+  df <- merge(base, df, by = "data", all.x = TRUE)
+  setorder(df, data)
+  df[, ret := log(tanca) - shift(log(tanca))]
+  df[, perd := -ret]
+  df <- df[is.finite(ret) & !is.na(ret)]
+  return(df)
+}
+
+llista1m <- list(
+  BTC = alinear(BTC, basetemps),
+  ETH = alinear(ETH, basetemps),
+  BNB = alinear(BNB, basetemps),
+  XRP = alinear(XRP, basetemps),
+  SOL = alinear(SOL, basetemps)
+)
+
+
+plotparlogquadrants <- function(r1, r2, nom1, nom2, fitsq,
                                 fitxer = "parells", nbins = 100, freq = "") {
   
   cols4 <- c("orange", "steelblue", "tomato", "purple")
@@ -11,8 +37,7 @@ plotparlogquadrants <- function(r1, r2, nom1, nom2, fits_q,
     list(-r1[r1<0 & r2>0],  r2[r1<0 & r2>0],  paste0(nom1,"-"), paste0(nom2,"+"), TRUE,  FALSE, c(-1,  1)),
     list( r1[r1>0 & r2>0],  r2[r1>0 & r2>0],  paste0(nom1,"+"), paste0(nom2,"+"), FALSE, FALSE, c( 1,  1)),
     list(-r1[r1<0 & r2<0], -r2[r1<0 & r2<0],  paste0(nom1,"-"), paste0(nom2,"-"), TRUE,  TRUE,  c(-1, -1)),
-    list( r1[r1>0 & r2<0], -r2[r1>0 & r2<0],  paste0(nom1,"+"), paste0(nom2,"-"), FALSE, TRUE,  c( 1, -1))
-  )
+    list( r1[r1>0 & r2<0], -r2[r1>0 & r2<0],  paste0(nom1,"+"), paste0(nom2,"-"), FALSE, TRUE,  c( 1, -1)))
   
   mats  <- vector("list", 4)
   bxs   <- vector("list", 4)
@@ -27,7 +52,7 @@ plotparlogquadrants <- function(r1, r2, nom1, nom2, fits_q,
     valid[i] <- TRUE
     bx <- exp(seq(log(min(x)), log(max(x)), length.out = nbins + 1))
     by <- exp(seq(log(min(y)), log(max(y)), length.out = nbins + 1))
-    m  <- matrix(0L, nbins, nbins)
+    m <- matrix(0L, nbins, nbins)
     xi <- pmax(1, pmin(nbins, findInterval(x, bx, rightmost.closed = TRUE)))
     yi <- pmax(1, pmin(nbins, findInterval(y, by, rightmost.closed = TRUE)))
     for (j in seq_along(xi)) m[xi[j], yi[j]] <- m[xi[j], yi[j]] + 1L
@@ -62,19 +87,19 @@ plotparlogquadrants <- function(r1, r2, nom1, nom2, fits_q,
     axis(2, at = aty, labels = formatC(exp(aty), format = "e", digits = 1))
     box()
     
-    fq <- fits_q[[i]]
+    fq <- fitsq[[i]]
     if (!is.null(fq)) {
-      muk    <- fq$parameters$mean
-      sigmak <- fq$parameters$variance$sigma[,, 1]   # <-- afegir [,,1]
+      muk <- fq$parameters$mean
+      sigmak <- fq$parameters$variance$sigma[,, 1]
       
       gxlog <- seq(range(lbx)[1], range(lbx)[2], length.out = 120)
       gylog <- seq(range(lby)[1], range(lby)[2], length.out = 120)
       grlog <- as.matrix(expand.grid(gxlog, gylog))
       grorig <- cbind(sx * exp(grlog[, 1]), sy * exp(grlog[, 2]))
       
-      dens  <- dmvnorm(grorig, muk, sigmak)
+      dens <- dmvnorm(grorig, muk, sigmak)
       densm <- matrix(dens, length(gxlog), length(gylog))
-      lev   <- quantile(dens[dens > 0], c(0.70, 0.90, 0.97))
+      lev <- quantile(dens[dens > 0], c(0.70, 0.90, 0.97))
       contour(gxlog, gylog, densm, add = TRUE,
               col = cols4[i], lwd = 1.5, levels = lev, drawlabels = FALSE)
       
@@ -117,20 +142,20 @@ for (p in parells) {
     X[,1] < 0 & X[,2] < 0,
     X[,1] > 0 & X[,2] < 0
   )
-  noms_q <- c("neg-pos", "pos-pos", "neg-neg", "pos-neg")
+  nomsq <- c("neg-pos", "pos-pos", "neg-neg", "pos-neg")
   
-  fits_q <- lapply(seq_along(masks), function(i) {
+  fitsq <- lapply(seq_along(masks), function(i) {
     Xq <- X[masks[[i]], , drop = FALSE]
     if (nrow(Xq) < 10) return(NULL)
     Mclust(Xq, G = 1, modelNames = "VVV", verbose = FALSE)
   })
   
   cat("\nResultats per quadrant:\n")
-  for (i in seq_along(fits_q)) {
-    fq <- fits_q[[i]]
-    if (is.null(fq)) { cat(noms_q[i], ": insuficient\n"); next }
-    cat(sprintf("  %s  n=%d  mu=(%+.2e, %+.2e)  tr(Sigma)=%.2e\n",
-                noms_q[i], sum(masks[[i]]),
+  for (i in seq_along(fitsq)) {
+    fq <- fitsq[[i]]
+    if (is.null(fq)) { cat(nomsq[i], ": insuficient\n"); next }
+    cat(sprintf(" %s  n=%d  mu=(%+.2e, %+.2e)  tr(Sigma)=%.2e\n",
+                nomsq[i], sum(masks[[i]]),
                 fq$parameters$mean[1], fq$parameters$mean[2],
                 sum(diag(fq$parameters$variance$sigma[,, 1]))))
   }
@@ -138,10 +163,9 @@ for (p in parells) {
   pref <- paste0(n1, "_", n2, "_1min")
   
   plotparlogquadrants(
-    r1     = dm$r1, r2 = dm$r2,
-    nom1   = n1,    nom2 = n2,
-    fits_q = fits_q,
+    r1 = dm$r1, r2 = dm$r2,
+    nom1 = n1, nom2 = n2,
+    fitsq = fitsq,
     fitxer = paste0("quadrants_", pref),
-    freq   = "1min"
-  )
+    freq = "1min")
 }
