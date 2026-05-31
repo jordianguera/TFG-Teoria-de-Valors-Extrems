@@ -55,7 +55,7 @@ for (freq in names(freqs)) {
 }
 # Funció de supervivència empírica - panels agrupats per freqüència i escala
 
-ecdf_survival <- function(x) {
+ecdfsupervivencia <- function(x) {
   xs <- sort(x)
   n  <- length(xs)
   list(x = xs, y = 1 - seq_len(n) / n)
@@ -68,6 +68,112 @@ configs <- list(
   list(logstr = "xy", tag = "lnXY")
 )
 
+
+
+basetemps <- Reduce(function(x, y) merge(x, y, by = "data", all = FALSE),
+                    list(BTC[, .(data)],
+                         ETH[, .(data)],
+                         BNB[, .(data)],
+                         XRP[, .(data)],
+                         SOL[, .(data)]))
+retornscont <- function(df, temps) {
+  setorderv(df, temps)
+  df[, ret := log(tanca) - shift(log(tanca))]
+  df[, perd := -ret]
+  df <- df[is.finite(ret) & !is.na(ret)]
+  return(df)
+}
+
+alinear <- function(df, base) {
+  df <- merge(base, df, by = "data", all.x = TRUE)
+  setorder(df, data)
+  df[, ret := log(tanca) - shift(log(tanca))]
+  df[, perd := -ret]
+  df <- df[is.finite(ret) & !is.na(ret)]
+  return(df)
+}
+
+llista1m <- list(BTC = alinear(BTC, basetemps),
+  ETH = alinear(ETH, basetemps),
+  BNB = alinear(BNB, basetemps),
+  XRP = alinear(XRP, basetemps),
+  SOL = alinear(SOL, basetemps))
+
+BTC[, hora := floor_date(data, "1 hour")]
+ETH[, hora := floor_date(data, "1 hour")]
+BNB[, hora := floor_date(data, "1 hour")]
+XRP[, hora := floor_date(data, "1 hour")]
+SOL[, hora := floor_date(data, "1 hour")]
+
+basetemps1h <- Reduce(intersect, list(
+  unique(BTC$hora),
+  unique(ETH$hora),
+  unique(BNB$hora),
+  unique(XRP$hora),
+  unique(SOL$hora)
+))
+
+BTC <- BTC[hora %in% basetemps1h]
+ETH <- ETH[hora %in% basetemps1h]
+BNB <- BNB[hora %in% basetemps1h]
+XRP <- XRP[hora %in% basetemps1h]
+SOL <- SOL[hora %in% basetemps1h]
+
+btc1h <- retornscont(agrega_ohlc(BTC, "hora"), "hora")
+eth1h <- retornscont(agrega_ohlc(ETH, "hora"), "hora")
+bnb1h <- retornscont(agrega_ohlc(BNB, "hora"), "hora")
+xrp1h <- retornscont(agrega_ohlc(XRP, "hora"), "hora")
+sol1h <- retornscont(agrega_ohlc(SOL, "hora"), "hora")
+
+BTC[, dia := as.Date(data)]
+ETH[, dia := as.Date(data)]
+BNB[, dia := as.Date(data)]
+XRP[, dia := as.Date(data)]
+SOL[, dia := as.Date(data)]
+
+basetemps1d <- Reduce(intersect, list(
+  unique(BTC$dia),
+  unique(ETH$dia),
+  unique(BNB$dia),
+  unique(XRP$dia),
+  unique(SOL$dia)
+))
+
+BTCd <- BTC[dia %in% basetemps1d]
+ETHd <- ETH[dia %in% basetemps1d]
+BNBd <- BNB[dia %in% basetemps1d]
+XRPd <- XRP[dia %in% basetemps1d]
+SOLd <- SOL[dia %in% basetemps1d]
+
+btc1d <- retornscont(agrega_ohlc(BTCd, "dia"), "dia")
+eth1d <- retornscont(agrega_ohlc(ETHd, "dia"), "dia")
+bnb1d <- retornscont(agrega_ohlc(BNBd, "dia"), "dia")
+xrp1d <- retornscont(agrega_ohlc(XRPd, "dia"), "dia")
+sol1d <- retornscont(agrega_ohlc(SOLd, "dia"), "dia")
+
+
+llista1m <- list(BTC = btc1m,
+  ETH = eth1m,
+  BNB = bnb1m,
+  XRP = xrp1m,
+  SOL = sol1m)
+
+llista1h <- list(BTC = btc1h,
+  ETH = eth1h,
+  BNB = bnb1h,
+  XRP = xrp1h,
+  SOL = sol1h)
+
+llista1d <- list(BTC = btc1d,
+  ETH = eth1d,
+  BNB = bnb1d,
+  XRP = xrp1d,
+  SOL = sol1d)
+
+
+freqs <- list("1min" = llista1m, "1hora" = llista1h, "1dia" = llista1d)
+
+
 for (freq in names(freqs)) {
   for (cfg in configs) {
     
@@ -79,8 +185,8 @@ for (freq in names(freqs)) {
     for (n in noms) {
       ret <- freqs[[freq]][[n]]$ret
       
-      sp <- ecdf_survival(ret[ret > 0])
-      sn <- ecdf_survival(abs(ret[ret < 0]))
+      sp <- ecdfsupervivencia(ret[ret > 0])
+      sn <- ecdfsupervivencia(abs(ret[ret < 0]))
       
       plot(sp$x, sp$y,
            type = "l", lwd = 1.5,
@@ -108,7 +214,7 @@ for (freq in names(freqs)) {
 # 6.2.4 Parells 2 a 2
 
 plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq = "") {
-  n  <- min(length(r1), length(r2))
+  n <- min(length(r1), length(r2))
   r1 <- r1[1:n]; r2 <- r2[1:n]
   
   casos <- list(
@@ -118,9 +224,9 @@ plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq
     list( r1[r1>0 & r2<0], -r2[r1>0 & r2<0],  paste0(nom1,"+"), paste0(nom2,"-"), FALSE, TRUE)   # BR
   )
   
-  mats  <- vector("list", 4)
-  bxs   <- vector("list", 4)
-  bys   <- vector("list", 4)
+  mats <- vector("list", 4)
+  bxs <- vector("list", 4)
+  bys <- vector("list", 4)
   valid <- logical(4)
   
   for (i in seq_along(casos)) {
@@ -157,7 +263,7 @@ plotparlog <- function(r1, r2, nom1, nom2, fitxer = "parells", nbins = 100, freq
     
     if (!valid[i]) { plot.new(); next }
     
-    bx   <- bxs[[i]]; by <- bys[[i]]; m <- mats[[i]]
+    bx <- bxs[[i]]; by <- bys[[i]]; m <- mats[[i]]
     xinv <- cas[[5]];  yinv <- cas[[6]]
     
     lbx <- log(bx); lby <- log(by)
@@ -199,7 +305,7 @@ plotparlin <- function(r1, r2, nom1, nom2, nbins=300, freq="") {
   x <- r1[ok]; y <- r2[ok]
   bx <- seq(min(x), max(x), length.out = (nbins+1))
   by <- seq(min(y), max(y), length.out = (nbins+1))
-  m  <- matrix(0L, nbins, nbins)
+  m <- matrix(0L, nbins, nbins)
   xi <- pmax(1, pmin(nbins, findInterval(x, bx, rightmost.closed = TRUE)))
   yi <- pmax(1, pmin(nbins, findInterval(y, by, rightmost.closed = TRUE)))
   for (i in seq_along(xi)) m[xi[i], yi[i]] <- m[xi[i], yi[i]] + 1L
@@ -217,7 +323,6 @@ for (freq in names(freqs)) {
     d2 <- freqs[[freq]][[p[2]]]$ret
     plotparlog(d1, d2, p[1], p[2], fitxer = paste0("parells_", p[1], "_", p[2], "_", freq), freq=freq)
   }
-  
   
   for (grp in list(list(1:5,"1"), list(6:10,"2"))) {
     png(paste0("parells", grp[[2]], "_lin_", freq, ".png"), width = 1800, height = 1200, res = 150)
