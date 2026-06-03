@@ -2,6 +2,7 @@ library(evir)
 library(ercv)
 library(ismev)
 library(POT)
+library(knitr)
 
 dfperdues1m <- lapply(llista1m, function(df) df$perd)
 dfperdues1h <- lapply(llista1h, function(df) df$perd)
@@ -13,59 +14,14 @@ perduesBNB1m<-dfperdues1m$BNB[dfperdues1m$BNB>0]
 perduesXRP1m<-dfperdues1m$XRP[dfperdues1m$XRP>0]
 perduesSOL1m<-dfperdues1m$SOL[dfperdues1m$SOL>0]
 
-perduesBTC1h<-dfperdues1h$BTC[dfperdues1h$BTC>0]
-perduesBTC1d<-dfperdues1d$BTC[dfperdues1d$BTC>0]
-
-# 1m
-meplot(perduesBTC1m)
-hill(perduesBTC1m)
-POT::mrlplot(perduesBTC1m)
-tcplot(perduesBTC1m)
-
-cvplot(perduesBTC1m)
 #com que te cues pesades el cvplot no es pot interpretar ja que no te moments finits
 #idem com que la EVI esta per sobre dels punts suspensius, no hi ha moments finits
 
-#per tant, es passa a tdata
-dadest0 <- tdata(perduesBTC1m)
-
-par(mfrow = c(1, 3))
-cvplot(dadest0)
-meplot(dadest0)
-hill(dadest0)
 #les dades son laplace
 #es pot observar que amb 100.000 mostres no excluides ja hi ha un bon threshold (aprox 50%)
 
-par(mfrow = c(1, 1))
-
-# Threshold amb thrselect (es ho fa amb simulacio o sigui que defineixo una seed)
-set.seed(1714)
-tselectBTC1m<-thrselect(perduesBTC1m)
-tselectBTC1m
-
-uBTC1m<-tselectBTC1m$solution$threshold
-pBTC1m<-perduesBTC1m[perduesBTC1m>uBTC1m]
-print(paste0(round(100*length(pBTC1m)/length(perduesBTC1m),3),"%"))
-
-par(mfrow = c(1, 1))
-fitBTC1m <- fitpot(perduesBTC1m, threshold = uBTC1m)
-print(fitBTC1m)
-
-# QVaR
-nivells <- c(0.98, 0.99, 0.999)
-varsBTC1m <- sapply(nivells, function(p) {
-  v <- qpot(1 - p, pars = fitBTC1m$coeff, lower.tail = FALSE)
-  cat("VaR(", p * 100, "%) =", round(v, 6), "\n")
-  v
-})
-names(varsBTC1m) <- paste0("VaR ", nivells * 100, "%")
-print(varsBTC1m)
-
-
-
 
 criptos <- c("BTC","ETH","BNB","XRP","SOL")
-resultats1m <- list()
 
 for (cripto in criptos) {
   cat(cripto, "1m\n")
@@ -90,85 +46,10 @@ for (cripto in criptos) {
   meplot(dadest0, main = paste(cripto, "tdata - meplot"))
   hill(dadest0, main = paste(cripto, "tdata - hill"))
   dev.off()
-  
-  # Seleccio de threshold
-  set.seed(1714)
-  tsel <- thrselect(perdues)
-  u <- tsel$solution$threshold
-  p <- perdues[perdues > u]
-  cat("Threshold:", round(u, 6), "\n")
-  cat("Excedencies:", paste0(round(100 * length(p) / length(perdues), 3), "%"), "\n")
-  
-  # Ajust GPD
-  fit <- fitpot(perdues, threshold = u)
-  print(fit)
-  
-  # VaR
-  nivells <- c(0.98, 0.99, 0.999)
-  vars <- sapply(nivells, function(q) {
-    v <- qpot(1 - q, pars = fit$coeff, lower.tail = FALSE)
-    cat("VaR(", q * 100, "%) =", round(v, 6), "\n")
-    v
-  })
-  names(vars) <- paste0("VaR ", nivells * 100, "%")
-  
-  resultats1m[[cripto]] <- list(
-    threshold = u,
-    pct_excedencies = round(100 * length(p) / length(perdues), 3),
-    fit = fit,
-    VaR = vars
-  )
 }
-
-
-
 
 
 set.seed(1714)
-for (cripto in criptos) {
-  cat(cripto, "1m\n")
-  
-  perdues <- dfperdues1m[[cripto]]
-  perdues <- perdues[perdues > 0]
-  
-  # Seleccio de threshold
-
-  tsel <- thrselect(perdues)
-  u <- tsel$solution$threshold
-  p <- perdues[perdues > u]
-  cat("Threshold:", round(u, 6), "\n")
-  cat("Excedencies:", paste0(round(100 * length(p) / length(perdues), 3), "%"), "\n")
-  
-  # Ajust GPD
-  fit <- fitpot(perdues, threshold = u)
-  print(fit$coeff)
-  
-  # VaR
-  nivells <- c(0.98, 0.99, 0.999)
-  vars <- sapply(nivells, function(q) {
-    v <- qpot(1 - q, pars = fit$coeff, lower.tail = FALSE)
-    cat("VaR(", q * 100, "%) =", round(v, 6), "\n")
-    v
-  })
-  names(vars) <- paste0("VaR ", nivells * 100, "%")
-  
-  resultats1m[[cripto]] <- list(
-    threshold = u,
-    pct_excedencies = round(100 * length(p) / length(perdues), 3),
-    fit = fit,
-    VaR = vars
-  )
-}
-
-# en base al gràfic
-mostresexcloses <- c(BTC = 1500000, ETH = 1500000, BNB = 1500000,
-                      XRP = 1500000, SOL = 1000000)
-mostresincloses <- c(BTC = length(dfperdues1m$BTC[dfperdues1m$BTC>0])-mostresexcloses["BTC"],
-                     ETH = length(dfperdues1m$ETH[dfperdues1m$ETH>0])-mostresexcloses["ETH"],
-                     BNB = length(dfperdues1m$BNB[dfperdues1m$BNB>0])-mostresexcloses["BNB"],
-                     XRP = length(dfperdues1m$XRP[dfperdues1m$XRP>0])-mostresexcloses["XRP"],
-                     SOL = length(dfperdues1m$SOL[dfperdues1m$SOL>0])-mostresexcloses["SOL"])
-
 
 tdataBTC<-tdata(dfperdues1m$BTC[dfperdues1m$BTC>0])
 tdataETH<-tdata(dfperdues1m$ETH[dfperdues1m$ETH>0])
@@ -184,92 +65,151 @@ tdades <- list(
   XRP = tdataXRP
 )
 
+#Cvplot de les dades transformades per trobar el llindar on comença la cua
 for (nom in names(tdades)) {
-  png(filename = paste0("cvplot_", nom, ".png"),
+  x <- na.omit(tdades[[nom]])
+  png(filename = paste0("cvplot1_", nom, ".png"),
+      width = 1200,
+      height = 800,
+      res = 150)
+  
+  cvplot(x)
+  dev.off()
+}
+
+#Zoom dels cvplots dibuixant l'interval de confiança del cv per trobar el llindar aproximat
+
+png(filename = paste0("cvplot_BNB.png"),
+  width = 1200,
+  height = 800,
+  res = 150  )
+ne <- ceiling(length(tdades[["BNB"]]) * 0.001)
+
+cvplot(tdades[["BNB"]], nextremes = ne, evi = evicv(0.82))
+dev.off()
+
+#Un llindar adequat per BNB per ajustar un fitpot per trobar l'evi aproximat sembla ser a prop de les 1947750 observacions excloses
+
+png(filename = paste0("cvplot_BTC.png"),
     width = 1200,
     height = 800,
     res = 150  )
-  
-  cvplot(tdades[[nom]])
-  dev.off()
-}
+ne <- ceiling(length(tdades[["BTC"]]) * 0.004)
+
+cvplot(tdades[["BTC"]], nextremes = ne, evi = evicv(0.8))
+dev.off()
+
+#Un llindar adequat per BTC per ajustar un fitpot per trobar l'evi aproximat sembla ser a prop de les 2190000 observacions excloses
+
+
+png(filename = paste0("cvplot_ETH.png"),
+    width = 1200,
+    height = 800,
+    res = 150  )
+ne <- ceiling(length(tdades[["ETH"]]) * 0.004)
+
+cvplot(tdades[["ETH"]], nextremes = ne, evi = evicv(0.82))
+dev.off()
+
+#Un llindar adequat per ETH per ajustar un fitpot per trobar l'evi aproximat sembla ser a prop de les 2170000 observacions excloses
+
+
+png(filename = paste0("cvplot_SOL.png"),
+    width = 1200,
+    height = 800,
+    res = 150  )
+ne <- ceiling(length(tdades[["SOL"]]) * 0.003)
+
+cvplot(tdades[["SOL"]], nextremes = ne, evi = evicv(0.88))
+dev.off()
+
+#Un llindar adequat per SOL per ajustar un fitpot per trobar l'evi aproximat sembla ser a prop de les 1350000 observacions excloses
+
+
+png(filename = paste0("cvplot_XRP.png"),
+    width = 1200,
+    height = 800,
+    res = 150  )
+ne <- ceiling(length(tdades[["XRP"]]) * 0.0005)
+
+dev.off()
+
+#Un llindar adequat per XRP per ajustar un fitpot per trobar l'evi aproximat sembla ser a prop de les 1896000 observacions excloses
+
+set.seed(1714)
+nextremesBNB<-(length(tdataBNB)-1948000)
+nextremesBTC<-(length(tdataBTC)-2190000)
+nextremesETH<-(length(tdataETH)-2170000)
+nextremesSOL<-(length(tdataSOL)-1350000)
+nextremesXRP<-(length(tdataXRP)-1896000)
+
+eviBNBaprox<-fitpot(tdataBNB, nextremes = nextremesBNB)$coef[["evi"]]
+eviBTCaprox<-fitpot(tdataBTC, nextremes = nextremesBTC)$coef[["evi"]]
+eviETHaprox<-fitpot(tdataETH, nextremes = nextremesETH)$coef[["evi"]]
+eviSOLaprox<-fitpot(tdataSOL, nextremes = nextremesSOL)$coef[["evi"]]
+eviXRPaprox<-fitpot(tdataXRP, nextremes = nextremesXRP)$coef[["evi"]]
+
+thrBNBaprox<-thrselect(tdataBNB, evi = eviBNBaprox)
+thrBTCaprox<-thrselect(tdataBTC, evi = eviBTCaprox)
+thrETHaprox<-thrselect(tdataETH, evi = eviETHaprox)
+thrSOLaprox<-thrselect(tdataSOL, evi = eviSOLaprox)
+thrXRPaprox<-thrselect(tdataXRP, evi = eviXRPaprox)
+
+fitBNB<-fitpot(dfperdues1m$BNB, nextremes = thrBNBaprox$solution$nextremes)
+fitBTC<-fitpot(dfperdues1m$BTC, nextremes = thrBTCaprox$solution$nextremes)
+fitETH<-fitpot(dfperdues1m$ETH, nextremes = thrETHaprox$solution$nextremes)
+fitSOL<-fitpot(dfperdues1m$SOL, nextremes = thrSOLaprox$solution$nextremes)
+fitXRP<-fitpot(dfperdues1m$XRP, nextremes = thrXRPaprox$solution$nextremes)
 
 criptos <- c("BTC", "ETH", "BNB", "XRP", "SOL")
 
 for (cripto in criptos) {
-  cat(cripto,"\n")
-  perdues <- dfperdues1m[[cripto]]
-  perdues <- perdues[perdues > 0]
+  fit <- get(paste0("fit", cripto))
   
-  tdat <- tdades[[cripto]]
-  u_tdat <- sort(perdues, decreasing = TRUE)[ mostresexcloses[cripto]]
+  png(filename = paste0("ccdf_", cripto, ".png"),
+    width = 1200,
+    height = 800,
+    res = 150)
   
-  fit <- fitpot(perdues, nextremes = mostresincloses[cripto])
-  evi <- fit$coeff["evi"]
+  ccdfplot(dfperdues1m[[cripto]], pars = fit,
+           main = paste("ccdf ", cripto))
   
-  set.seed(1714)
-  tsel <- thrselect(perdues, nextremes = mostresincloses[cripto])
+  dev.off()
   
-  cat("\n EVI:", round(evi, 4),
-      " i Threshold:", round(tsel$solution$threshold, 6), "\n")
+  png(filename = paste0("ccdf_logxy_", cripto, ".png"),
+    width = 1200,
+    height = 800,
+    res = 150)
+  
+  ccdfplot(dfperdues1m[[cripto]],pars = fit, log = "xy",
+          main = paste("ccdf ", cripto, "(loglog)"))
+  dev.off()
 }
 
+VaR<-list()
+for (cripto in criptos){
+  fit <- get(paste0("fit", cripto))
+  nivells <- c(0.9999, 0.999925, 0.99995, 0.999975, 0.99999)
+  vars <- sapply(nivells, function(q) {
+    v <- qpot(1 - q, pars = fit$coeff, lower.tail = FALSE)
+    cat("VaR(", q * 100, "%) =", round(v, 6), "\n")
+    v
+  })
+  names(vars) <- paste0("VaR ", nivells * 100, "%")
+  VaR[[cripto]]<- vars
+}
 
-set.seed(1714)
-tdBTCthr<-thrselect(tdataBTC,m=30,nsim=200)
-cievi(tdBTCthr$solution$nextremes, tdBTCthr$solution$evi)
-#evi 0.2922817 
-tdETHthr<-thrselect(tdataETH,m=30,nsim=200)
-cievi(tdETHthr$solution$nextremes, tdETHthr$solution$evi)
-#evi 0.2451789 
-tdBNBthr<-thrselect(tdataBNB,m=30,nsim=200)
-cievi(tdBNBthr$solution$nextremes, tdBNBthr$solution$evi)
-#evi 0.2202733
-tdXRPthr<-thrselect(tdataXRP,m=30,nsim=200)
-cievi(tdXRPthr$solution$nextremes, tdXRPthr$solution$evi)
-#evi 0.02120167
-tdSOLthr<-thrselect(tdataSOL,m=30,nsim=200)
-cievi(tdSOLthr$solution$nextremes, tdSOLthr$solution$evi)
-#evi 0.130553
+VaR
 
-#tots els cievi mostren que evi=0.5 es pot rebutjar
+taulaVaR <- do.call(rbind, VaR)
+taulaVaR <- round(taulaVaR, 6)
 
-fitBTC1m <- fitpot(perduesBTC1m, evi = 0.2922817)
+kable(
+  taulaVaR,
+  format = "latex",
+  booktabs = TRUE,
+  caption = "VaR per cada nivell",
+  label = "varpot",
+  align = "lccccc"
+)
 
-ccdfplot(perduesBTC1m,pars=fitBTC1m,log="xy",main="(loglog)")
-
-fitBTC<-fitpot(tdataBTC, nextremes = length(tdataBTC)*0.1)
-fitETH<-fitpot(tdataETH, nextremes = round(length(tdataETH)*0.1,0))
-fitBNB<-fitpot(tdataBNB, nextremes = round(length(tdataBNB)*0.1,0))
-fitXRP<-fitpot(tdataXRP, nextremes = round(length(tdataXRP)*0.1,0))
-fitSOL<-fitpot(tdataSOL, nextremes = round(length(tdataSOL)*0.1,0))
-
-thrselect(tdataBTC, nextremes = length(tdataBTC)*0.1)
-thrselect(tdataETH, nextremes = round(length(tdataETH)*0.1,0))
-thrselect(tdataBNB, nextremes = round(length(tdataBNB)*0.1,0))
-thrselect(tdataXRP, nextremes = round(length(tdataXRP)*0.1,0))
-thrselect(tdataSOL, nextremes = round(length(tdataSOL)*0.1,0))
-
-BTCthr<-thrselect(tdataBTC, evi = fitBTC$coeff[["evi"]],m=30,nsim=100)
-ETHthr<-thrselect(tdataETH, evi = fitETH$coeff[["evi"]],m=30,nsim=100)
-BNBthr<-thrselect(tdataBNB, evi = fitBNB$coeff[["evi"]],m=30,nsim=100)
-XRPthr<-thrselect(tdataXRP, evi = fitXRP$coeff[["evi"]],m=30,nsim=100)
-SOLthr<-thrselect(tdataSOL, evi = fitSOL$coeff[["evi"]],m=30,nsim=100)
-
-
-
-fitBTC2<-fitpot(perduesBTC1m, threshold = BTCthr$solution$threshold)
-fitETH2<-fitpot(perduesETH1m, threshold = ETHthr$solution$threshold)
-fitBNB2<-fitpot(perduesBNB1m, threshold = BNBthr$solution$threshold)
-fitXRP2<-fitpot(perduesXRP1m, threshold = XRPthr$solution$threshold)
-fitSOL2<-fitpot(perduesSOL1m, threshold = SOLthr$solution$threshold)
-
-fitpot(perduesBTC1m, threshold = BTCthr$solution$threshold)
-
-ccdfplot(tdataBTC,pars=fitBTC,log="xy",main="tdata (loglog)")
-ccdfplot(perduesBTC1m,pars=fitBTC,log="xy",main="btc (loglog)")
-
-llindars<-c(BTCthr, ETHthr, BNBNthr, XRPthr, SOLthr)
-
-fitpot(tdataETH, nextremes = 130)
-fitpot(tdataBTC, nextremes = 131)
