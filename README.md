@@ -41,7 +41,6 @@ Two complementary objectives structure the analysis: characterising the tail beh
 ├── Analisi Descriptiva.R     # Descriptive statistics and normality tests
 ├── Analisi de correlacions.R # Spearman correlation analysis
 ├── Analisi Univariant.R      # Univariate EVT: threshold selection and GPD fitting
-├── AnalisiUnivariant.R       # Extended univariate EVT analysis
 ├── Analisi Covariant.R       # CoVaR and ΔCoVaR estimation
 ├── Mixtura de normals.R      # Bivariate normal mixture models
 ├── Grafics.R                 # Diagnostic and descriptive plots
