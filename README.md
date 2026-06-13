@@ -28,7 +28,7 @@ Two complementary objectives structure the analysis: characterising the tail beh
 - **Normal Mixture Modelling** (`Mixtura de normals.R`)  
   Gaussian mixture models applied to bivariate return distributions to account for regime-dependent dependence structure.
 
-- **Graphics & Visualisation** (`Grafics.R`, `Histogrames.R`)  
+- **Graphics & Visualisation** (`Histogrames.R`)  
   Diagnostic plots, tail behaviour visualisations, and distributional graphics using `ggplot2`, `gridExtra`, `ggfortify`, and `scales`.
 
 - **CoVaR & Systemic Risk** (`Analisi Covariant.R`)  
@@ -43,7 +43,7 @@ Two complementary objectives structure the analysis: characterising the tail beh
 ├── Analisi Univariant.R      # Univariate EVT: threshold selection and GPD fitting
 ├── Analisi Covariant.R       # CoVaR and ΔCoVaR estimation
 ├── Mixtura de normals.R      # Bivariate normal mixture models
-├── Grafics.R                 # Diagnostic and descriptive plots
+├── Grafics.R                 # Simulated example plots
 ├── Histogrames.R             # Histogram visualisations
 └── TFG-Teoria-de-Valors-Extrems.Rproj  # RStudio project file
 ```
