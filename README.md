@@ -22,7 +22,7 @@ Two complementary objectives structure the analysis: characterising the tail beh
 - **Bivariate Structure & Quadrant Decomposition** (`Grafics.R`)  
   Decomposition of the joint return space into four sign-based quadrants with bivariate normal mixture models fitted per regime, capturing asymmetric dependence between asset pairs.
 
-- **Univariate EVT Analysis** (`Analisi Univariant.R` / `AnalisiUnivariant.R`)  
+- **Univariate EVT Analysis** (`Analisi Univariant.R`)  
   Tail diagnostics (Mean Excess Plot, Hill plot, Mean Residual Life Plot, cvplot), threshold selection via `thrselect()` from the `ercv` package, and GPD fitting using `fitpot()`. Extreme VaR estimation at confidence levels up to 99.999%.
 
 - **Normal Mixture Modelling** (`Mixtura de normals.R`)  
@@ -39,7 +39,7 @@ Two complementary objectives structure the analysis: characterising the tail beh
 ```
 ├── criptoapi.py              # Python script for high-frequency data retrieval
 ├── Analisi Descriptiva.R     # Descriptive statistics and normality tests
-├── Analisi de correlacions.R # Spearman correlation analysis
+├── Analisi de correlacions.R # Correlation analysis
 ├── Analisi Univariant.R      # Univariate EVT: threshold selection and GPD fitting
 ├── Analisi Covariant.R       # CoVaR and ΔCoVaR estimation
 ├── Mixtura de normals.R      # Bivariate normal mixture models
