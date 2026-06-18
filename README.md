@@ -1,4 +1,4 @@
-# Final Degree Project (TFG) – Extreme Value Theory Applied to Systemic Risk in Cryptocurrency Markets
+# Final Degree Project (TFG) - Extreme Value Theory Applied to Systemic Risk in Cryptocurrency Markets
 
 This repository contains the code, data workflows, and documentation for my Final Degree Project (TFG) in Statistics at Universitat Autònoma de Barcelona.
 
